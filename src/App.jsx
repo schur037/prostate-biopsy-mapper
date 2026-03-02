@@ -71,7 +71,7 @@ const btn = { fontFamily: FONT, fontSize: "9px", textTransform: "uppercase", let
 
 /* ── factories ── */
 const mkSpec = () => ({ gleason: null, coresPos: "", coresTotal: "", maxPct: "", pni: false, crib: false, idc: false, notes: "" });
-const mkSession = (n) => ({ id: Date.now(), label: n || "", date: "", psa: "", type: "diagnostic", specimens: ZONES.reduce((a, z) => { a[z] = mkSpec(); return a; }, {}), mriLesions: [], targetedBx: [], focalPlan: null, treatment: null, genomics: { decipher: "", oncotype: "", prolaris: "" }, mriImageData: null, ipss: null, shim: null, postTxMonitoring: null });
+const mkSession = (n) => ({ id: Date.now(), label: n || "", date: "", psa: "", type: "diagnostic", specimens: ZONES.reduce((a, z) => { a[z] = mkSpec(); return a; }, {}), mriLesions: [], targetedBx: [], focalPlan: null, treatment: null, genomics: { decipher: "", oncotype: "", prolaris: "" }, mriImageData: null, ipss: null, shim: null, lifeExpectancy: null, capraS: null, postTxMonitoring: null });
 const mkLesion = (n) => ({ id: Date.now(), name: n || "", sector: MRI_SECTORS[0], pirads: 3, sizeMm: "", x: 210, y: 150, notes: "" });
 const mkTargetBx = (lid) => ({ id: Date.now(), lesionId: lid, gleason: null, coresPos: "", coresTotal: "", maxPct: "", pni: false, crib: false, idc: false, notes: "" });
 const mkPatient = () => ({ id: Date.now(), mrn: "", dob: "", tStage: "cT1c", volume: "", sessions: [mkSession("Biopsy 1")], notes: "" });
@@ -467,6 +467,51 @@ function PatientEducation({ patient, session }) {
         </div>
       )}
 
+      {/* Decision-Making Tools & Nomograms */}
+      <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: "6px", padding: "10px", marginBottom: "14px" }}>
+        <div style={{ ...lbl, fontSize: "9px", letterSpacing: "1.5px", marginBottom: "8px" }}>Decision-Making Tools & Nomograms</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "10px" }}>
+          {[
+            {
+              name: "MSKCC Pre-Radical Prostatectomy Nomogram",
+              desc: "Predicts pathological stage and biochemical recurrence after surgery.",
+              url: "https://www.mskcc.org/nomograms/prostate"
+            },
+            {
+              name: "CAPRA Score (UCSF)",
+              desc: "Cancer of the Prostate Risk Assessment score. Uses PSA, Gleason, T-stage, percent positive cores, and age.",
+              url: "https://urology.ucsf.edu/research/cancer/prostate-cancer-risk-assessment-and-the-ucsf-capra-score"
+            },
+            {
+              name: "Partin Tables",
+              desc: "Predict pathological stage (organ-confined, EPE, SVI, LN+) based on PSA, Gleason, and T-stage.",
+              url: "https://www.hopkinsmedicine.org/brady-urology-institute/specialties/conditions-and-treatments/prostate-cancer/fighting-prostate-cancer/partin-tables"
+            },
+            {
+              name: "NCCN Risk Calculator",
+              desc: "Risk group classification with treatment recommendations.",
+              url: "https://www.nccn.org/professionals/physician_gls/pdf/prostate.pdf"
+            },
+            {
+              name: "AUA Risk Stratification",
+              desc: "AUA/ASTRO/SUO guidelines for localized prostate cancer.",
+              url: "https://www.auanet.org/guidelines-and-quality/guidelines/clinically-localized-prostate-cancer"
+            }
+          ].map(tool => (
+            <div key={tool.name} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: "5px", padding: "10px", display: "flex", flexDirection: "column" }}>
+              <div style={{ fontSize: "10px", fontWeight: 600, color: C.accent, marginBottom: "4px" }}>{tool.name}</div>
+              <div style={{ fontSize: "8px", color: C.textSec, marginBottom: "8px", flex: 1, lineHeight: "1.4" }}>{tool.desc}</div>
+              <button
+                onClick={() => window.open(tool.url, '_blank')}
+                style={{ ...btn, background: C.accentDim, color: C.accent, border: `1px solid ${C.accent}40`, fontSize: "8px", padding: "5px 10px", alignSelf: "flex-start" }}
+              >
+                Visit Tool →
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* FAQ */}
       <FaqAccordion />
     </div>
@@ -536,6 +581,30 @@ function ActiveSurveillanceGuide({ sessions }) {
               {trigger}
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Reclassification Risk Data */}
+      <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: "6px", padding: "10px", marginBottom: "14px" }}>
+        <div style={{ ...lbl, fontSize: "9px", letterSpacing: "1.5px", marginBottom: "8px" }}>Grade Reclassification on Surveillance Biopsies</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "8px", marginBottom: "10px" }}>
+          {[
+            { period: "Year 1 Confirmatory", rate: "~25%" },
+            { period: "Year 2 Cumulative", rate: "~15% per year" },
+            { period: "Year 5 Cumulative", rate: "~30-40%" },
+            { period: "Year 10 Cumulative", rate: "~50%" }
+          ].map((item, i) => (
+            <div key={i} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: "4px", padding: "8px" }}>
+              <div style={{ ...lbl, fontSize: "7px", marginBottom: "3px" }}>{item.period}</div>
+              <div style={{ fontSize: "13px", fontWeight: 700, color: C.warn }}>{item.rate}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ background: C.accentDim, border: `1px solid ${C.accent}30`, borderRadius: "4px", padding: "7px", marginBottom: "6px", fontSize: "8px", color: C.accent, lineHeight: "1.5" }}>
+          <strong>Note:</strong> Reclassification does NOT necessarily mean cancer has become dangerous. Many reclassifications reflect sampling differences rather than true biological progression.
+        </div>
+        <div style={{ background: C.successDim, border: `1px solid ${C.success}30`, borderRadius: "4px", padding: "7px", fontSize: "8px", color: C.textSec, lineHeight: "1.5" }}>
+          <strong>MRI's Role in AS:</strong> Use of MRI in AS protocols has been shown to reduce unnecessary biopsies by 30-50% while maintaining detection of clinically significant reclassification (Klotz et al, Eur Urol 2024).
         </div>
       </div>
 
@@ -609,6 +678,64 @@ function PrintReport({ patient, session, onClose }) {
             </div>
           </div>
         )}
+
+        {/* IPSS Score */}
+        {session.ipss && ((() => {
+          const total = [1, 2, 3, 4, 5, 6, 7].reduce((s, i) => s + (session.ipss[`q${i}`] || 0), 0);
+          const interpretation = total <= 7 ? "Mild" : total <= 19 ? "Moderate" : "Severe";
+          return (
+            <div style={{ marginBottom: "10px", padding: "6px 8px", border: "1px solid #ddd", borderRadius: "3px" }}>
+              <div style={{ fontSize: "8px", textTransform: "uppercase", color: "#888", letterSpacing: "1px", marginBottom: "3px" }}>IPSS Score</div>
+              <div style={{ fontSize: "10px" }}>Score: <strong>{total}</strong> ({interpretation}){session.ipss?.qol !== undefined && session.ipss.qol !== "" ? ` · QoL: ${session.ipss.qol}` : ""}</div>
+            </div>
+          );
+        })())}
+
+        {/* SHIM Score */}
+        {session.shim && ((() => {
+          const total = [1, 2, 3, 4, 5].reduce((s, i) => s + (session.shim[`q${i}`] || 0), 0);
+          const interpretation = total >= 22 ? "No ED" : total >= 17 ? "Mild ED" : total >= 12 ? "Mild-Moderate ED" : total >= 8 ? "Moderate ED" : "Severe ED";
+          return (
+            <div style={{ marginBottom: "10px", padding: "6px 8px", border: "1px solid #ddd", borderRadius: "3px" }}>
+              <div style={{ fontSize: "8px", textTransform: "uppercase", color: "#888", letterSpacing: "1px", marginBottom: "3px" }}>SHIM Score</div>
+              <div style={{ fontSize: "10px" }}>Score: <strong>{total}</strong> ({interpretation})</div>
+            </div>
+          );
+        })())}
+
+        {/* Life Expectancy */}
+        {session.lifeExpectancy?.age && ((() => {
+          const LETable = { 50: { 0: 32, 2: 26, 4: 18 }, 55: { 0: 28, 2: 22, 4: 15 }, 60: { 0: 23, 2: 18, 4: 12 }, 65: { 0: 19, 2: 15, 4: 10 }, 70: { 0: 15, 2: 11, 4: 7 }, 75: { 0: 12, 2: 8, 4: 5 }, 80: { 0: 8, 2: 6, 4: 3 }, 85: { 0: 6, 2: 4, 4: 2 } };
+          const age = session.lifeExpectancy.age; const cci = session.lifeExpectancy.cci || 0;
+          const ageKey = Math.min(85, Math.max(50, Math.round(age / 5) * 5));
+          const le = LETable[ageKey]?.[Math.min(4, cci)] || LETable[85][4];
+          return (
+            <div style={{ marginBottom: "10px", padding: "6px 8px", border: "1px solid #ddd", borderRadius: "3px" }}>
+              <div style={{ fontSize: "8px", textTransform: "uppercase", color: "#888", letterSpacing: "1px", marginBottom: "3px" }}>Life Expectancy</div>
+              <div style={{ fontSize: "10px" }}>Est. <strong>~{le} years</strong> (Age: {age}, CCI: {cci})</div>
+            </div>
+          );
+        })())}
+
+        {/* CAPRA-S Score */}
+        {session.capraS && session.capraS.preOpPsa !== undefined && session.capraS.margins && ((() => {
+          const psa = session.capraS.preOpPsa || 0;
+          let score = 0;
+          if (psa <= 6) score += 0; else if (psa <= 10) score += 1; else if (psa <= 20) score += 2; else score += 3;
+          score += session.capraS.margins === "positive" ? 2 : 0;
+          score += session.capraS.epe === "yes" ? 1 : 0;
+          score += session.capraS.svi === "yes" ? 2 : 0;
+          score += session.capraS.ln === "yes" ? 1 : 0;
+          score += session.capraS.gleason === "3+3" ? 0 : session.capraS.gleason === "3+4" ? 1 : session.capraS.gleason === "4+3" ? 2 : 3;
+          const riskGroup = score >= 6 ? "High" : score >= 3 ? "Intermediate" : "Low";
+          const bcr5yr = score >= 6 ? "~50%" : score >= 3 ? "~20%" : "~5%";
+          return (
+            <div style={{ marginBottom: "10px", padding: "6px 8px", border: "1px solid #ddd", borderRadius: "3px" }}>
+              <div style={{ fontSize: "8px", textTransform: "uppercase", color: "#888", letterSpacing: "1px", marginBottom: "3px" }}>CAPRA-S (Post-Surgical)</div>
+              <div style={{ fontSize: "10px" }}>Score: <strong>{score}</strong> · Risk: <strong>{riskGroup}</strong> · 5yr BCR: <strong>{bcr5yr}</strong></div>
+            </div>
+          );
+        })())}
 
         <div style={{ fontSize: "12px", fontWeight: 700, borderBottom: "2px solid #333", paddingBottom: "3px", marginBottom: "8px" }}>SYSTEMATIC BIOPSY</div>
         <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "12px" }}>
@@ -1135,6 +1262,115 @@ export default function App() {
                 </div>
               </div>
             )}
+
+            {/* CAPRA-S Calculator (Post-Surgical Risk) */}
+            <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: "5px", padding: "10px" }}>
+              <div style={{ ...lbl, fontSize: "9px", marginBottom: "6px", fontWeight: 700 }}>CAPRA-S Score (Post-Prostatectomy)</div>
+              <div style={{ fontSize: "8px", color: C.textMut, marginBottom: "8px", fontStyle: "italic" }}>Approximation — Verify with validated instruments</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", marginBottom: "6px" }}>
+                <div>
+                  <div style={lbl}>Pre-op PSA (ng/mL)</div>
+                  <input
+                    type="number" step="0.1"
+                    value={ses.capraS?.preOpPsa || ""}
+                    onChange={e => setSes(s => ({ ...s, capraS: { ...(s.capraS || {}), preOpPsa: parseFloat(e.target.value) || "" } }))}
+                    style={inp}
+                    placeholder="0-100"
+                  />
+                </div>
+                <div>
+                  <div style={lbl}>Surgical Margins</div>
+                  <select
+                    value={ses.capraS?.margins || ""}
+                    onChange={e => setSes(s => ({ ...s, capraS: { ...(s.capraS || {}), margins: e.target.value } }))}
+                    style={{ ...inp, appearance: "auto" }}
+                  >
+                    <option value="">—</option>
+                    <option value="negative">Negative (0 pts)</option>
+                    <option value="positive">Positive (2 pts)</option>
+                  </select>
+                </div>
+                <div>
+                  <div style={lbl}>Extraprostatic Extension (EPE)</div>
+                  <select
+                    value={ses.capraS?.epe || ""}
+                    onChange={e => setSes(s => ({ ...s, capraS: { ...(s.capraS || {}), epe: e.target.value } }))}
+                    style={{ ...inp, appearance: "auto" }}
+                  >
+                    <option value="">—</option>
+                    <option value="no">No (0 pts)</option>
+                    <option value="yes">Yes (1 pt)</option>
+                  </select>
+                </div>
+                <div>
+                  <div style={lbl}>Seminal Vesicle Invasion (SVI)</div>
+                  <select
+                    value={ses.capraS?.svi || ""}
+                    onChange={e => setSes(s => ({ ...s, capraS: { ...(s.capraS || {}), svi: e.target.value } }))}
+                    style={{ ...inp, appearance: "auto" }}
+                  >
+                    <option value="">—</option>
+                    <option value="no">No (0 pts)</option>
+                    <option value="yes">Yes (2 pts)</option>
+                  </select>
+                </div>
+                <div>
+                  <div style={lbl}>Lymph Node Involvement</div>
+                  <select
+                    value={ses.capraS?.ln || ""}
+                    onChange={e => setSes(s => ({ ...s, capraS: { ...(s.capraS || {}), ln: e.target.value } }))}
+                    style={{ ...inp, appearance: "auto" }}
+                  >
+                    <option value="">—</option>
+                    <option value="no">No (0 pts)</option>
+                    <option value="yes">Yes (1 pt)</option>
+                  </select>
+                </div>
+                <div>
+                  <div style={lbl}>Gleason at Surgery</div>
+                  <select
+                    value={ses.capraS?.gleason || ""}
+                    onChange={e => setSes(s => ({ ...s, capraS: { ...(s.capraS || {}), gleason: e.target.value } }))}
+                    style={{ ...inp, appearance: "auto" }}
+                  >
+                    <option value="">—</option>
+                    <option value="3+3">3+3 (0 pts)</option>
+                    <option value="3+4">3+4 (1 pt)</option>
+                    <option value="4+3">4+3 (2 pts)</option>
+                    <option value="4+4">≥4+4 (3 pts)</option>
+                  </select>
+                </div>
+              </div>
+              {(() => {
+                const psa = ses.capraS?.preOpPsa;
+                const margins = ses.capraS?.margins;
+                const epe = ses.capraS?.epe;
+                const svi = ses.capraS?.svi;
+                const ln = ses.capraS?.ln;
+                const gleason = ses.capraS?.gleason;
+
+                if (psa === "" || psa === undefined || !margins || !epe || !svi || !ln || !gleason) return null;
+
+                let score = 0;
+                if (psa <= 6) score += 0; else if (psa <= 10) score += 1; else if (psa <= 20) score += 2; else score += 3;
+                score += margins === "positive" ? 2 : 0;
+                score += epe === "yes" ? 1 : 0;
+                score += svi === "yes" ? 2 : 0;
+                score += ln === "yes" ? 1 : 0;
+                score += gleason === "3+3" ? 0 : gleason === "3+4" ? 1 : gleason === "4+3" ? 2 : 3;
+
+                let riskGroup = "Low"; let bcr5yr = "~5%"; let color = C.success;
+                if (score >= 6) { riskGroup = "High"; bcr5yr = "~50%"; color = C.danger; }
+                else if (score >= 3) { riskGroup = "Intermediate"; bcr5yr = "~20%"; color = C.warn; }
+
+                return (
+                  <div style={{ background: color + "15", border: `1px solid ${color}40`, borderRadius: "3px", padding: "6px", fontSize: "9px", color: color, fontWeight: 700 }}>
+                    CAPRA-S Score: {score}
+                    <div style={{ fontSize: "8px", marginTop: "3px", fontWeight: 400, color: C.textSec }}>Risk: {riskGroup} | BCR @ 5yr: {bcr5yr}</div>
+                  </div>
+                );
+              })()}
+            </div>
 
             {/* ── POST-TREATMENT MONITORING ── */}
             {panel === "post-tx" && (
