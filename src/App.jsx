@@ -990,15 +990,50 @@ function PrintReport({ patient, session, onClose }) {
   const ps = { fontFamily: "'Courier New', monospace", fontSize: "10px", color: "#111", lineHeight: "1.5" };
   const th = { padding: "3px 6px", textAlign: "left", borderBottom: "2px solid #333", fontSize: "8px", textTransform: "uppercase", color: "#555" };
   const td = { padding: "3px 6px", borderBottom: "1px solid #ddd", fontSize: "9px" };
+  const reportRef = useRef(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  const savePDF = async () => {
+    if (!reportRef.current) return;
+    setPdfLoading(true);
+    try {
+      // Dynamically load html2pdf.js
+      if (!window.html2pdf) {
+        await new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.2/html2pdf.bundle.min.js";
+          script.onload = resolve;
+          script.onerror = reject;
+          document.head.appendChild(script);
+        });
+      }
+      const filename = `prostate-bx-report-${patient.mrn || "patient"}-${new Date().toISOString().slice(0, 10)}.pdf`;
+      const opt = {
+        margin: [10, 10, 10, 10],
+        filename,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+        pagebreak: { mode: ["avoid-all", "css", "legacy"] },
+      };
+      await window.html2pdf().set(opt).from(reportRef.current).save();
+    } catch (err) {
+      console.error("PDF export failed:", err);
+      // Fallback to browser print dialog
+      window.print();
+    }
+    setPdfLoading(false);
+  };
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "#fff", overflowY: "auto" }}>
       <style>{`@media print { .no-print { display: none !important; } }`}</style>
       <div className="no-print" style={{ position: "fixed", top: 8, right: 8, display: "flex", gap: "6px", zIndex: 10000 }}>
-        <button onClick={() => window.print()} style={{ ...btn, background: "#1a5cba", color: "#fff", padding: "8px 18px", fontSize: "11px" }}>🖨 Print</button>
-        <button onClick={onClose} style={{ ...btn, background: "#eee", color: "#333", padding: "8px 14px", fontSize: "11px" }}>✕</button>
+        <button onClick={savePDF} disabled={pdfLoading} style={{ ...btn, background: "#CC3333", color: "#fff", padding: "8px 18px", fontSize: "11px", opacity: pdfLoading ? 0.6 : 1 }}>{pdfLoading ? "Generating..." : "Save PDF"}</button>
+        <button onClick={() => window.print()} style={{ ...btn, background: "#1a5cba", color: "#fff", padding: "8px 18px", fontSize: "11px" }}>Print</button>
+        <button onClick={onClose} style={{ ...btn, background: "#eee", color: "#333", padding: "8px 14px", fontSize: "11px" }}>Close</button>
       </div>
-      <div style={{ maxWidth: "720px", margin: "0 auto", padding: "30px 24px", ...ps }}>
+      <div ref={reportRef} style={{ maxWidth: "720px", margin: "0 auto", padding: "30px 24px", ...ps }}>
         <div style={{ borderBottom: "3px solid #111", paddingBottom: "8px", marginBottom: "14px" }}>
           <div style={{ fontSize: "16px", fontWeight: 700 }}>PROSTATE BIOPSY MAPPING REPORT</div>
           <div style={{ fontSize: "9px", color: "#666" }}>MRI-Fusion · NCCN Risk · Genomic Classifiers · Focal Therapy Assessment</div>
