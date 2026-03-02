@@ -1117,10 +1117,452 @@ function focalOk(session, patient) {
 }
 
 /* ══════════════════════════════════════════════════════════════════
+   PATIENT INTAKE WIZARD
+   ══════════════════════════════════════════════════════════════════ */
+
+function PatientIntake({ patient, session, onComplete, onSwitchToClinical }) {
+  const [step, setStep] = useState(1);
+  const [name, setName] = useState("");
+  const [dob, setDob] = useState(patient.dob || "");
+  const [biopsyDate, setBiopsyDate] = useState(session.date || "");
+  const [psa, setPsa] = useState(session.psa || "");
+  const [volume, setVolume] = useState(patient.volume || "");
+  const [gradeGroup, setGradeGroup] = useState(null);
+  const [coresPos, setCoresPos] = useState("");
+  const [coresTotal, setCoresTotal] = useState("");
+  const [maxPct, setMaxPct] = useState("");
+  const [hasMri, setHasMri] = useState(null);
+  const [pirads, setPirads] = useState(null);
+  const [mriLesions, setMriLesions] = useState("");
+  const [decipher, setDecipher] = useState(session.genomics?.decipher || "");
+  const [oncotype, setOncotype] = useState(session.genomics?.oncotype || "");
+  const [prolaris, setProlaris] = useState(session.genomics?.prolaris || "");
+  const [tStage, setTStage] = useState(patient.tStage || "cT1c");
+  const [pni, setPni] = useState(false);
+  const [crib, setCrib] = useState(false);
+  const [idc, setIdc] = useState(false);
+  const [expandedCard, setExpandedCard] = useState(null);
+
+  const psaDensity = psa && volume ? (parseFloat(psa) / parseFloat(volume)).toFixed(3) : null;
+
+  const gGradeLabels = {
+    "benign": { label: "Benign / No Cancer", color: "#4CAF50", desc: "No cancer detected" },
+    "3+3": { label: "GG1 - Slow-growing", color: "#8BC34A", desc: "Very Low Risk", risk: "Very Low" },
+    "3+4": { label: "GG2 - Mostly slow-growing", color: "#FFC107", desc: "Low to Intermediate Risk", risk: "Low to Intermediate" },
+    "4+3": { label: "GG3 - Moderately aggressive", color: "#FF9800", desc: "Intermediate Risk", risk: "Intermediate" },
+    "4+4": { label: "GG4 - Aggressive", color: "#F44336", desc: "High Risk", risk: "High" },
+    "GG5": { label: "GG5 - Most aggressive", color: "#B71C1C", desc: "Very High Risk", risk: "Very High" },
+  };
+
+  const piradsLabels = {
+    1: { label: "PI-RADS 1-2", color: "#4CAF50", desc: "Very unlikely to be significant cancer" },
+    2: { label: "PI-RADS 1-2", color: "#4CAF50", desc: "Very unlikely to be significant cancer" },
+    3: { label: "PI-RADS 3", color: "#FFC107", desc: "Uncertain" },
+    4: { label: "PI-RADS 4", color: "#FF9800", desc: "Likely significant cancer" },
+    5: { label: "PI-RADS 5", color: "#F44336", desc: "Very likely significant cancer" },
+  };
+
+  const handleNext = () => {
+    if (step < 6) {
+      setStep(step + 1);
+      window.scrollTo(0, 0);
+    }
+  };
+
+  const handleBack = () => {
+    if (step > 1) {
+      setStep(step - 1);
+      window.scrollTo(0, 0);
+    }
+  };
+
+  const handleComplete = () => {
+    const data = {
+      dob,
+      tStage,
+      volume,
+      psa,
+      gradeGroup,
+      coresPos,
+      coresTotal,
+      maxPct,
+      pirads: hasMri === true ? pirads : null,
+      decipher,
+      pni,
+      crib,
+      idc,
+    };
+    onComplete(data);
+  };
+
+  const patientCardStyles = {
+    container: { maxWidth: "700px", margin: "0 auto", padding: "20px", minHeight: "100vh", background: "#0a0e14" },
+    header: { fontSize: "28px", fontWeight: 700, color: "#D8E4F0", marginBottom: "12px", textAlign: "center" },
+    description: { fontSize: "14px", color: "#7A8EA0", marginBottom: "24px", textAlign: "center", lineHeight: "1.6" },
+    label: { fontSize: "14px", fontWeight: 600, color: "#D8E4F0", marginBottom: "8px", display: "block" },
+    input: { fontSize: "14px", padding: "10px 12px", borderRadius: "8px", border: "1px solid #1A2232", background: "#10161F", color: "#D8E4F0", width: "100%", boxSizing: "border-box", marginBottom: "16px", fontFamily: FONT },
+    cardGrid: { display: "grid", gridTemplateColumns: "1fr", gap: "12px", marginBottom: "20px" },
+    card: { padding: "16px", borderRadius: "8px", border: "1px solid #1A2232", background: "#0B1018", cursor: "pointer", transition: "all 0.2s" },
+    progressBar: { width: "100%", height: "6px", background: "#1A2232", borderRadius: "3px", marginBottom: "24px", overflow: "hidden" },
+    progressFill: { height: "100%", background: "#3B8BEB", width: `${(step / 6) * 100}%`, transition: "width 0.3s" },
+    buttonGroup: { display: "flex", gap: "12px", justifyContent: "space-between", marginTop: "24px" },
+    button: { padding: "12px 20px", fontSize: "14px", fontWeight: 600, borderRadius: "8px", border: "none", cursor: "pointer", fontFamily: FONT },
+    buttonPrimary: { background: "#3B8BEB", color: "white" },
+    buttonSecondary: { background: "#1A2232", color: "#7A8EA0", border: "1px solid #1A2232" },
+    checkbox: { marginRight: "8px", width: "18px", height: "18px" },
+    counter: { display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" },
+    counterBtn: { padding: "4px 10px", background: "#1A2232", color: "#3B8BEB", border: "1px solid #1A2232", borderRadius: "4px", cursor: "pointer", fontWeight: 600, fontFamily: FONT },
+    slider: { width: "100%", fontSize: "14px", padding: "10px 12px", borderRadius: "8px", border: "1px solid #1A2232", background: "#10161F", color: "#D8E4F0", marginBottom: "12px", fontFamily: FONT },
+  };
+
+  const CardButton = ({ selected, onClick, color, title, desc }) => (
+    <button
+      onClick={onClick}
+      style={{
+        ...patientCardStyles.card,
+        border: selected ? `2px solid ${color}` : "1px solid #1A2232",
+        background: selected ? color + "15" : "#0B1018",
+        padding: "16px",
+        textAlign: "left",
+      }}
+    >
+      <div style={{ fontSize: "14px", fontWeight: 700, color: selected ? color : "#D8E4F0", marginBottom: "4px" }}>{title}</div>
+      <div style={{ fontSize: "12px", color: selected ? color : "#7A8EA0" }}>{desc}</div>
+    </button>
+  );
+
+  const ExpandableCard = ({ title, children, isOpen }) => (
+    <div style={{ marginBottom: "12px", borderRadius: "8px", border: "1px solid #1A2232", overflow: "hidden" }}>
+      <button
+        onClick={() => setExpandedCard(isOpen ? null : title)}
+        style={{
+          width: "100%",
+          padding: "12px",
+          background: "#0B1018",
+          border: "none",
+          textAlign: "left",
+          cursor: "pointer",
+          color: "#D8E4F0",
+          fontWeight: 600,
+          fontSize: "13px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          fontFamily: FONT,
+        }}
+      >
+        {title}
+        <span style={{ fontSize: "16px" }}>{isOpen ? "▼" : "▶"}</span>
+      </button>
+      {isOpen && <div style={{ padding: "12px", background: "#10161F", fontSize: "12px", color: "#7A8EA0", lineHeight: "1.6" }}>{children}</div>}
+    </div>
+  );
+
+  return (
+    <div style={{ minHeight: "100vh", background: C.bg, color: C.textPri, fontFamily: FONT }}>
+      <div style={patientCardStyles.container}>
+        <div style={patientCardStyles.progressBar}>
+          <div style={patientCardStyles.progressFill} />
+        </div>
+
+        {/* STEP 1: Welcome & Basics */}
+        {step === 1 && (
+          <div>
+            <div style={patientCardStyles.header}>Let's walk through your results together</div>
+            <div style={patientCardStyles.description}>
+              We'll help you understand your prostate biopsy and other test results in a simple, step-by-step process.
+            </div>
+
+            <div style={{ background: "#0B1018", border: "1px solid #1A2232", borderRadius: "8px", padding: "16px", marginBottom: "24px" }}>
+              <div style={{ fontSize: "14px", fontWeight: 600, color: "#D8E4F0", marginBottom: "12px" }}>Why are we doing this?</div>
+              <div style={{ fontSize: "12px", color: "#7A8EA0", lineHeight: "1.6" }}>
+                Your biopsy results, PSA levels, and imaging help your doctor understand your prostate cancer risk. By entering this information, you'll get a personalized summary that you can discuss with your doctor and track over time.
+              </div>
+            </div>
+
+            <label style={patientCardStyles.label}>Your Name (optional)</label>
+            <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Enter your name" style={patientCardStyles.input} />
+
+            <label style={patientCardStyles.label}>Date of Birth</label>
+            <input type="date" value={dob} onChange={e => setDob(e.target.value)} style={patientCardStyles.input} />
+
+            <label style={patientCardStyles.label}>Date of Biopsy</label>
+            <input type="date" value={biopsyDate} onChange={e => setBiopsyDate(e.target.value)} style={patientCardStyles.input} />
+
+            <div style={patientCardStyles.buttonGroup}>
+              <button style={{ ...patientCardStyles.button, ...patientCardStyles.buttonSecondary }} onClick={() => onSwitchToClinical()}>
+                Skip to Clinical
+              </button>
+              <button style={{ ...patientCardStyles.button, ...patientCardStyles.buttonPrimary }} onClick={handleNext}>
+                Continue
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 2: PSA Results */}
+        {step === 2 && (
+          <div>
+            <div style={patientCardStyles.header}>What was your PSA level?</div>
+            <div style={patientCardStyles.description}>PSA (Prostate-Specific Antigen) is a protein your prostate produces. Higher levels may indicate cancer or benign growth.</div>
+
+            <label style={patientCardStyles.label}>PSA Level (ng/mL)</label>
+            <input type="number" step="0.1" value={psa} onChange={e => setPsa(e.target.value)} placeholder="e.g., 6.5" style={patientCardStyles.input} />
+
+            {psa && (
+              <div style={{ background: parseFloat(psa) <= 4 ? "#143A1A" : parseFloat(psa) <= 10 ? "#3A3414" : "#3A1414", border: `1px solid ${parseFloat(psa) <= 4 ? "#4CAF50" : parseFloat(psa) <= 10 ? "#E8A020" : "#D94040"}`, borderRadius: "8px", padding: "16px", marginBottom: "16px" }}>
+                <div style={{ fontSize: "12px", color: "#7A8EA0", marginBottom: "8px" }}>PSA Scale:</div>
+                <div style={{ display: "flex", gap: "12px", marginBottom: "12px" }}>
+                  <div style={{ flex: 1, padding: "8px", background: "#4CAF50", borderRadius: "6px", textAlign: "center", fontSize: "11px", fontWeight: 600, color: "white" }}>Normal 0-4</div>
+                  <div style={{ flex: 1, padding: "8px", background: "#E8A020", borderRadius: "6px", textAlign: "center", fontSize: "11px", fontWeight: 600, color: "white" }}>Intermediate 4-10</div>
+                  <div style={{ flex: 1, padding: "8px", background: "#D94040", borderRadius: "6px", textAlign: "center", fontSize: "11px", fontWeight: 600, color: "white" }}>Elevated &gt;10</div>
+                </div>
+                <div style={{ fontSize: "16px", fontWeight: 700, color: parseFloat(psa) <= 4 ? "#4CAF50" : parseFloat(psa) <= 10 ? "#E8A020" : "#D94040" }}>Your PSA: {psa} ng/mL</div>
+              </div>
+            )}
+
+            <ExpandableCard title="What is PSA?" isOpen={expandedCard === "psa"}>
+              PSA stands for Prostate-Specific Antigen. It's a protein made by your prostate. Normal levels are typically below 4 ng/mL, but PSA can be elevated due to cancer, benign enlargement (BPH), infection, or even recent activities. Your doctor looks at your PSA level, how fast it's changing, and how it compares to prostate size (PSA density) to assess cancer risk.
+            </ExpandableCard>
+
+            <label style={patientCardStyles.label}>Prostate Volume (cubic centimeters, optional)</label>
+            <input type="number" step="0.1" value={volume} onChange={e => setVolume(e.target.value)} placeholder="e.g., 45" style={patientCardStyles.input} />
+
+            {psaDensity && (
+              <div style={{ background: "#10161F", border: "1px solid #1A2232", borderRadius: "8px", padding: "12px", marginBottom: "16px" }}>
+                <div style={{ fontSize: "12px", color: "#7A8EA0" }}>Calculated PSA Density</div>
+                <div style={{ fontSize: "18px", fontWeight: 700, color: "#3B8BEB" }}>{psaDensity}</div>
+                <div style={{ fontSize: "10px", color: "#7A8EA0", marginTop: "4px" }}>Lower density is generally better. Normal is &lt; 0.15</div>
+              </div>
+            )}
+
+            <div style={patientCardStyles.buttonGroup}>
+              <button style={{ ...patientCardStyles.button, ...patientCardStyles.buttonSecondary }} onClick={handleBack}>
+                Back
+              </button>
+              <button style={{ ...patientCardStyles.button, ...patientCardStyles.buttonPrimary }} onClick={handleNext}>
+                Continue
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 3: Biopsy Results */}
+        {step === 3 && (
+          <div>
+            <div style={patientCardStyles.header}>What did your biopsy show?</div>
+            <div style={patientCardStyles.description}>Your biopsy grade tells us how aggressive the cancer is. Lower grades are slower-growing and have better prognosis.</div>
+
+            <label style={{ ...patientCardStyles.label, marginBottom: "12px" }}>Biopsy Grade (Gleason Score)</label>
+            <div style={patientCardStyles.cardGrid}>
+              {Object.entries(gGradeLabels).map(([key, val]) => (
+                <CardButton
+                  key={key}
+                  selected={gradeGroup === key}
+                  onClick={() => setGradeGroup(key)}
+                  color={val.color}
+                  title={val.label}
+                  desc={val.desc}
+                />
+              ))}
+            </div>
+
+            <ExpandableCard title="What does this mean?" isOpen={expandedCard === "grade"}>
+              Gleason scores range from 6-10. Grade Groups simplify this: GG1 (3+3) is slowest-growing, while GG5 (4+5, 5+4, 5+5) is most aggressive. Your doctor uses this along with PSA and imaging to decide on treatment options.
+            </ExpandableCard>
+
+            <label style={patientCardStyles.label}>How many cores had cancer?</label>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "16px" }}>
+              <div>
+                <label style={{ fontSize: "12px", color: "#7A8EA0", display: "block", marginBottom: "8px" }}>Positive Cores</label>
+                <input type="number" value={coresPos} onChange={e => setCoresPos(e.target.value)} placeholder="e.g., 3" style={patientCardStyles.input} />
+              </div>
+              <div>
+                <label style={{ fontSize: "12px", color: "#7A8EA0", display: "block", marginBottom: "8px" }}>Total Cores Taken</label>
+                <input type="number" value={coresTotal} onChange={e => setCoresTotal(e.target.value)} placeholder="e.g., 12" style={patientCardStyles.input} />
+              </div>
+            </div>
+
+            <label style={patientCardStyles.label}>Highest percentage of cancer in any core (%)</label>
+            <input type="range" min="0" max="100" value={maxPct} onChange={e => setMaxPct(e.target.value)} style={{ ...patientCardStyles.slider, marginBottom: "8px" }} />
+            {maxPct && <div style={{ fontSize: "14px", fontWeight: 600, color: "#3B8BEB", marginBottom: "16px" }}>{maxPct}%</div>}
+
+            <div style={patientCardStyles.buttonGroup}>
+              <button style={{ ...patientCardStyles.button, ...patientCardStyles.buttonSecondary }} onClick={handleBack}>
+                Back
+              </button>
+              <button style={{ ...patientCardStyles.button, ...patientCardStyles.buttonPrimary }} onClick={handleNext}>
+                Continue
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 4: MRI Results */}
+        {step === 4 && (
+          <div>
+            <div style={patientCardStyles.header}>Did you have a prostate MRI?</div>
+            <div style={patientCardStyles.description}>MRI scans help find suspicious areas in the prostate and guide biopsy decisions.</div>
+
+            <label style={{ ...patientCardStyles.label, marginBottom: "12px" }}>MRI Status</label>
+            <div style={patientCardStyles.cardGrid}>
+              <CardButton selected={hasMri === true} onClick={() => setHasMri(true)} color="#3B8BEB" title="Yes, I had an MRI" desc="Enter PI-RADS score" />
+              <CardButton selected={hasMri === false} onClick={() => setHasMri(false)} color="#7A8EA0" title="No MRI" desc="Skip MRI results" />
+              <CardButton selected={hasMri === null && hasMri !== true && hasMri !== false} onClick={() => setHasMri(null)} color="#7A8EA0" title="I'm not sure" desc="Don't know if I had one" />
+            </div>
+
+            {hasMri === true && (
+              <div>
+                <label style={patientCardStyles.label}>What was your PI-RADS score?</label>
+                <div style={patientCardStyles.cardGrid}>
+                  {[
+                    { val: 1, ...piradsLabels[1] },
+                    { val: 3, ...piradsLabels[3] },
+                    { val: 4, ...piradsLabels[4] },
+                    { val: 5, ...piradsLabels[5] },
+                  ].map(p => (
+                    <CardButton
+                      key={p.val}
+                      selected={pirads === p.val}
+                      onClick={() => setPirads(p.val)}
+                      color={p.color}
+                      title={p.label}
+                      desc={p.desc}
+                    />
+                  ))}
+                </div>
+
+                <label style={patientCardStyles.label}>Number of MRI lesions (optional)</label>
+                <input type="number" value={mriLesions} onChange={e => setMriLesions(e.target.value)} placeholder="e.g., 1" style={patientCardStyles.input} />
+
+                <ExpandableCard title="What is PI-RADS?" isOpen={expandedCard === "pirads"}>
+                  PI-RADS (Prostate Imaging-Reporting and Data System) scores range from 1-5. A score of 1-2 is very unlikely to have significant cancer, 3 is uncertain, 4 is likely to have cancer, and 5 is very likely. Higher scores may indicate need for biopsy or closer follow-up.
+                </ExpandableCard>
+              </div>
+            )}
+
+            <div style={patientCardStyles.buttonGroup}>
+              <button style={{ ...patientCardStyles.button, ...patientCardStyles.buttonSecondary }} onClick={handleBack}>
+                Back
+              </button>
+              <button style={{ ...patientCardStyles.button, ...patientCardStyles.buttonPrimary }} onClick={handleNext}>
+                Continue
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 5: Additional Tests */}
+        {step === 5 && (
+          <div>
+            <div style={patientCardStyles.header}>Additional Findings (Optional)</div>
+            <div style={patientCardStyles.description}>Tell us about any other tests or findings from your biopsy.</div>
+
+            <label style={patientCardStyles.label}>Clinical T-Stage (if known)</label>
+            <select value={tStage} onChange={e => setTStage(e.target.value)} style={patientCardStyles.input}>
+              {T_STAGES.map(t => <option key={t}>{t}</option>)}
+            </select>
+
+            <label style={patientCardStyles.label}>Genomic Testing (optional)</label>
+            <div style={{ marginBottom: "16px" }}>
+              <label style={{ fontSize: "12px", color: "#7A8EA0", display: "block", marginBottom: "4px" }}>Decipher Score (0-1.0)</label>
+              <input type="number" step="0.01" value={decipher} onChange={e => setDecipher(e.target.value)} placeholder="e.g., 0.35" style={patientCardStyles.input} />
+            </div>
+
+            <div style={{ marginBottom: "16px" }}>
+              <label style={{ fontSize: "12px", color: "#7A8EA0", display: "block", marginBottom: "4px" }}>Oncotype DX Score (0-100)</label>
+              <input type="number" step="1" value={oncotype} onChange={e => setOncotype(e.target.value)} placeholder="e.g., 25" style={patientCardStyles.input} />
+            </div>
+
+            <div style={{ marginBottom: "16px" }}>
+              <label style={{ fontSize: "12px", color: "#7A8EA0", display: "block", marginBottom: "4px" }}>Prolaris Score (-2 to 6)</label>
+              <input type="number" step="0.1" value={prolaris} onChange={e => setProlaris(e.target.value)} placeholder="e.g., 1.5" style={patientCardStyles.input} />
+            </div>
+
+            <label style={patientCardStyles.label}>Biopsy Findings</label>
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "16px" }}>
+              {[
+                { key: "pni", label: "Perineural Invasion", desc: "Cancer invading nerves" },
+                { key: "crib", label: "Cribriform Pattern", desc: "High-risk growth pattern" },
+                { key: "idc", label: "Intraductal Carcinoma", desc: "Cancer in ducts" },
+              ].map(f => (
+                <div key={f.key} style={{ padding: "12px", background: "#0B1018", border: "1px solid #1A2232", borderRadius: "8px", display: "flex", alignItems: "center", gap: "12px" }}>
+                  <input
+                    type="checkbox"
+                    checked={f.key === "pni" ? pni : f.key === "crib" ? crib : idc}
+                    onChange={e => {
+                      if (f.key === "pni") setPni(e.target.checked);
+                      if (f.key === "crib") setCrib(e.target.checked);
+                      if (f.key === "idc") setIdc(e.target.checked);
+                    }}
+                    style={patientCardStyles.checkbox}
+                  />
+                  <div>
+                    <div style={{ fontSize: "12px", fontWeight: 600, color: "#D8E4F0" }}>{f.label}</div>
+                    <div style={{ fontSize: "11px", color: "#7A8EA0" }}>{f.desc}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={patientCardStyles.buttonGroup}>
+              <button style={{ ...patientCardStyles.button, ...patientCardStyles.buttonSecondary }} onClick={handleBack}>
+                Back
+              </button>
+              <button style={{ ...patientCardStyles.button, ...patientCardStyles.buttonPrimary }} onClick={handleNext}>
+                Continue
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 6: Summary */}
+        {step === 6 && (
+          <div>
+            <div style={patientCardStyles.header}>Your Results Summary</div>
+            <div style={patientCardStyles.description}>Review your information below, then continue to the full tool or print for your records.</div>
+
+            <div style={{ background: "#0B1018", border: "1px solid #1A2232", borderRadius: "8px", padding: "16px", marginBottom: "20px" }}>
+              {name && <div style={{ fontSize: "12px", color: "#7A8EA0", marginBottom: "8px" }}>Name: <span style={{ color: "#D8E4F0", fontWeight: 600 }}>{name}</span></div>}
+              {dob && <div style={{ fontSize: "12px", color: "#7A8EA0", marginBottom: "8px" }}>DOB: <span style={{ color: "#D8E4F0", fontWeight: 600 }}>{new Date(dob).toLocaleDateString()}</span></div>}
+              {psa && <div style={{ fontSize: "12px", color: "#7A8EA0", marginBottom: "8px" }}>PSA: <span style={{ color: "#D8E4F0", fontWeight: 600 }}>{psa} ng/mL</span></div>}
+              {volume && <div style={{ fontSize: "12px", color: "#7A8EA0", marginBottom: "8px" }}>Prostate Volume: <span style={{ color: "#D8E4F0", fontWeight: 600 }}>{volume} cc</span></div>}
+              {gradeGroup && (
+                <div style={{ fontSize: "12px", color: "#7A8EA0", marginBottom: "8px" }}>
+                  Grade: <span style={{ color: gGradeLabels[gradeGroup].color, fontWeight: 600 }}>{gGradeLabels[gradeGroup].label}</span>
+                </div>
+              )}
+              {coresTotal && <div style={{ fontSize: "12px", color: "#7A8EA0", marginBottom: "8px" }}>Positive Cores: <span style={{ color: "#D8E4F0", fontWeight: 600 }}>{coresPos}/{coresTotal}</span></div>}
+              {maxPct && <div style={{ fontSize: "12px", color: "#7A8EA0", marginBottom: "8px" }}>Max Involvement: <span style={{ color: "#D8E4F0", fontWeight: 600 }}>{maxPct}%</span></div>}
+              {hasMri === true && pirads && <div style={{ fontSize: "12px", color: "#7A8EA0", marginBottom: "8px" }}>PI-RADS: <span style={{ color: piradsLabels[pirads].color, fontWeight: 600 }}>{piradsLabels[pirads].label}</span></div>}
+            </div>
+
+            <div style={{ background: "#143A1A", border: "1px solid #4CAF50", borderRadius: "8px", padding: "16px", marginBottom: "20px" }}>
+              <div style={{ fontSize: "12px", color: "#7A8EA0", marginBottom: "4px" }}>Risk Assessment</div>
+              <div style={{ fontSize: "18px", fontWeight: 700, color: "#4CAF50", marginBottom: "8px" }}>See full analysis in clinical tool</div>
+              <div style={{ fontSize: "11px", color: "#8BC34A" }}>Switch to the clinical interface for detailed NCCN risk stratification, active surveillance eligibility, and focal therapy planning.</div>
+            </div>
+
+            <div style={patientCardStyles.buttonGroup}>
+              <button style={{ ...patientCardStyles.button, ...patientCardStyles.buttonSecondary }} onClick={handleBack}>
+                Back
+              </button>
+              <button style={{ ...patientCardStyles.button, ...patientCardStyles.buttonPrimary }} onClick={handleComplete}>
+                Complete & View Clinical Tool
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════
    WELCOME OVERLAY
    ══════════════════════════════════════════════════════════════════ */
 
-function WelcomeOverlay({ onNewDiagnostic, onNewSurveillance, onImport, onSkip }) {
+function WelcomeOverlay({ onNewDiagnostic, onNewSurveillance, onImport, onSkip, onPatientMode }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9998 }}>
       <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: "8px", padding: "30px", maxWidth: "480px", textAlign: "center" }}>
@@ -1136,6 +1578,11 @@ function WelcomeOverlay({ onNewDiagnostic, onNewSurveillance, onImport, onSkip }
           <button onClick={onNewSurveillance} style={{ ...btn, background: C.warnDim, color: C.warn, border: `1px solid ${C.warn}40`, padding: "14px 16px", fontSize: "11px", fontWeight: 600, borderRadius: "6px", textAlign: "left", display: "flex", flexDirection: "column", cursor: "pointer" }}>
             <span style={{ fontSize: "12px", fontWeight: 700, marginBottom: "4px" }}>New Surveillance Biopsy</span>
             <span style={{ fontSize: "9px", color: C.textSec, fontWeight: 400 }}>Track repeat biopsies during active surveillance</span>
+          </button>
+
+          <button onClick={onPatientMode} style={{ ...btn, background: C.successDim, color: C.success, border: `1px solid ${C.success}40`, padding: "14px 16px", fontSize: "11px", fontWeight: 600, borderRadius: "6px", textAlign: "left", display: "flex", flexDirection: "column", cursor: "pointer" }}>
+            <span style={{ fontSize: "12px", fontWeight: 700, marginBottom: "4px" }}>Patient Intake</span>
+            <span style={{ fontSize: "9px", color: C.textSec, fontWeight: 400 }}>Friendly step-by-step guide for your results</span>
           </button>
 
           <button onClick={onImport} style={{ ...btn, background: C.bgInput, color: C.textSec, border: `1px solid ${C.border}`, padding: "14px 16px", fontSize: "11px", fontWeight: 600, borderRadius: "6px", textAlign: "left", display: "flex", flexDirection: "column", cursor: "pointer" }}>
@@ -1280,6 +1727,7 @@ export default function App() {
   const [showWelcome, setShowWelcome] = useState(true);
   const [editingSessionIdx, setEditingSessionIdx] = useState(null);
   const [editingSessionLabel, setEditingSessionLabel] = useState("");
+  const [appMode, setAppMode] = useState("clinical");
   const windowSize = useWindowSize();
   const svgRef = useRef(null);
   const importRef = useRef(null);
@@ -1367,15 +1815,64 @@ export default function App() {
     importRef.current?.click();
   };
 
+  const handleWelcomePatientMode = () => {
+    setAppMode("patient");
+    setShowWelcome(false);
+  };
+
   if (showPrint) return <PrintReport patient={pat} session={ses} onClose={() => setShowPrint(false)} />;
 
   const isSmallScreen = windowSize.width < 900;
   const isMobileScreen = windowSize.width < 600;
 
+  // Patient intake completion handler
+  const handlePatientIntakeComplete = (data) => {
+    if (data.dob) setPat({ dob: data.dob });
+    if (data.volume) setPat({ volume: data.volume });
+    if (data.tStage) setPat({ tStage: data.tStage });
+    if (data.psa) setSes({ psa: data.psa });
+    if (data.gradeGroup) {
+      setSes(s => {
+        const updated = { ...s, specimens: { ...s.specimens } };
+        // Find first empty zone and fill it
+        const emptyZone = ZONES.find(z => updated.specimens[z].gleason === null);
+        if (emptyZone) {
+          updated.specimens[emptyZone] = {
+            ...updated.specimens[emptyZone],
+            gleason: data.gradeGroup,
+            coresPos: data.coresPos || "",
+            coresTotal: data.coresTotal || "",
+            maxPct: data.maxPct || "",
+            pni: data.pni || false,
+            crib: data.crib || false,
+            idc: data.idc || false,
+          };
+        }
+        return updated;
+      });
+    }
+    if (data.pirads) {
+      const lesion = mkLesion("MRI Lesion 1");
+      lesion.pirads = data.pirads;
+      setSes(s => ({
+        ...s,
+        mriLesions: [lesion],
+      }));
+    }
+    if (data.decipher) setSes(s => ({ ...s, genomics: { ...s.genomics, decipher: data.decipher } }));
+    if (data.oncotype) setSes(s => ({ ...s, genomics: { ...s.genomics, oncotype: data.oncotype } }));
+    if (data.prolaris) setSes(s => ({ ...s, genomics: { ...s.genomics, prolaris: data.prolaris } }));
+    setAppMode("clinical");
+  };
+
+  if (appMode === "patient") {
+    return <PatientIntake patient={pat} session={ses} onComplete={handlePatientIntakeComplete} onSwitchToClinical={() => setAppMode("clinical")} />;
+  }
+
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.textPri, fontFamily: FONT, fontSize: "11px" }}>
       <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-      {shouldShowWelcome && <WelcomeOverlay onNewDiagnostic={handleWelcomeNewDiagnostic} onNewSurveillance={handleWelcomeNewSurveillance} onImport={handleWelcomeImport} onSkip={() => setShowWelcome(false)} />}
+      {shouldShowWelcome && <WelcomeOverlay onNewDiagnostic={handleWelcomeNewDiagnostic} onNewSurveillance={handleWelcomeNewSurveillance} onImport={handleWelcomeImport} onSkip={() => setShowWelcome(false)} onPatientMode={handleWelcomePatientMode} />}
       <input type="file" ref={imgInputRef} accept="image/*" style={{ display: "none" }} onChange={handleImageUpload} />
       <input type="file" ref={importRef} accept=".json" style={{ display: "none" }} onChange={handleImport} />
 
@@ -1396,6 +1893,8 @@ export default function App() {
           <button onClick={() => setShowPatientList(!showPatientList)} style={{ ...btn, background: showPatientList ? C.accentDim : C.bgInput, color: showPatientList ? C.accent : C.textSec, border: `1px solid ${showPatientList ? C.accent + "40" : C.border}`, padding: "3px 8px" }}>
             Registry ({patients.length})
           </button>
+          <div style={{ width: "1px", height: "16px", background: C.border }} />
+          <button onClick={() => setAppMode("patient")} style={{ ...btn, background: C.successDim, color: C.success, border: `1px solid ${C.success}30`, padding: "3px 8px", fontSize: "9px" }}>Patient View</button>
         </div>
       </div>
 
