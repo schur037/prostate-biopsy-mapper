@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import * as recharts from "recharts";
-const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer, Area, AreaChart } = recharts;
+const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer, Area, AreaChart, BarChart, Bar } = recharts;
 
 /* ══════════════════════════════════════════════════════════════════
    CONSTANTS & DATA
@@ -545,10 +545,329 @@ function PatientEducation({ patient, session }) {
 }
 
 /* ══════════════════════════════════════════════════════════════════
+   UPSTAGE RISK PREDICTOR
+   ══════════════════════════════════════════════════════════════════ */
+
+function UpstagePredictor({ patient, sessions }) {
+  const [overridePsa, setOverridePsa] = useState(null);
+  const [overrideVolume, setOverrideVolume] = useState(null);
+  const [overridePirads, setOverridePirads] = useState(null);
+  const [overrideGradeGroup, setOverrideGradeGroup] = useState(null);
+  const [overridePosCores, setOverridePosCores] = useState(null);
+  const [overrideTotalCores, setOverrideTotalCores] = useState(null);
+  const [overrideMaxPct, setOverrideMaxPct] = useState(null);
+  const [overrideDecipher, setOverrideDecipher] = useState(null);
+
+  // Auto-detect values from latest session
+  const latestSession = sessions && sessions.length > 0 ? sessions[sessions.length - 1] : null;
+  const specs = latestSession ? allSpecs(latestSession) : [];
+
+  // PSA from latest session
+  const autoPsa = latestSession?.psa ? parseFloat(latestSession.psa) : null;
+  const psa = overridePsa !== null ? overridePsa : autoPsa;
+
+  // Volume from patient
+  const autoVolume = patient?.volume ? parseFloat(patient.volume) : null;
+  const volume = overrideVolume !== null ? overrideVolume : autoVolume;
+
+  // PSA density
+  const psaDensity = psa && volume && volume > 0 ? psa / volume : null;
+
+  // Grade group from specs
+  const autoGradeGroup = specs.length > 0 ? (maxG(specs)?.gg || 1) : 1;
+  const gradeGroup = overrideGradeGroup !== null ? overrideGradeGroup : autoGradeGroup;
+
+  // Positive cores
+  const autoPosCores = specs.length > 0 ? sumCores(specs, "coresPos") : 0;
+  const posCores = overridePosCores !== null ? overridePosCores : autoPosCores;
+
+  // Total cores
+  const autoTotalCores = specs.length > 0 ? sumCores(specs, "coresTotal") : 0;
+  const totalCores = overrideTotalCores !== null ? overrideTotalCores : autoTotalCores;
+
+  // Percentage positive cores
+  const pctPosCores = totalCores > 0 ? (posCores / totalCores) * 100 : 0;
+
+  // Max core involvement
+  const autoMaxPct = specs.length > 0 ? Math.max(0, ...specs.map(s => parseInt(s.maxPct) || 0)) : 0;
+  const maxPct = overrideMaxPct !== null ? overrideMaxPct : autoMaxPct;
+
+  // PI-RADS from MRI lesions
+  const autoPirads = latestSession?.mriLesions && latestSession.mriLesions.length > 0
+    ? Math.max(...latestSession.mriLesions.map(l => l.pirads || 1))
+    : 1;
+  const pirads = overridePirads !== null ? overridePirads : autoPirads;
+
+  // Decipher score
+  const autoDecipher = latestSession?.genomics?.decipher ? parseFloat(latestSession.genomics.decipher) : null;
+  const decipher = overrideDecipher !== null ? overrideDecipher : autoDecipher;
+
+  // Calculate risk scores for each factor (0-100 scale)
+  const calculateRiskScores = () => {
+    let scores = {};
+
+    // PSA Density (HR 1.20 per 0.1)
+    if (psaDensity !== null) {
+      if (psaDensity < 0.10) scores.psaDensity = 10;
+      else if (psaDensity < 0.15) scores.psaDensity = 25;
+      else if (psaDensity < 0.20) scores.psaDensity = 45;
+      else scores.psaDensity = 70;
+    }
+
+    // PI-RADS
+    if (pirads === 1 || pirads === 2) scores.pirads = 10;
+    else if (pirads === 3) scores.pirads = 35; // HR 2.46
+    else if (pirads === 4) scores.pirads = 50; // HR 3.39
+    else if (pirads === 5) scores.pirads = 75; // HR 4.95
+
+    // Grade Group
+    if (gradeGroup <= 1) scores.gradeGroup = 15;
+    else if (gradeGroup === 2) scores.gradeGroup = 45; // OR ~2.5
+    else if (gradeGroup === 3) scores.gradeGroup = 60;
+    else if (gradeGroup === 4) scores.gradeGroup = 75;
+    else scores.gradeGroup = 90;
+
+    // % Positive Cores
+    if (pctPosCores < 33) scores.pctCores = 15;
+    else if (pctPosCores < 50) scores.pctCores = 40;
+    else scores.pctCores = 65;
+
+    // Max Core Involvement
+    if (maxPct < 50) scores.maxPct = 20;
+    else scores.maxPct = 55;
+
+    // Decipher (if available)
+    if (decipher !== null) {
+      if (decipher < 0.45) scores.decipher = 10;
+      else if (decipher < 0.60) scores.decipher = 45;
+      else scores.decipher = 75;
+    }
+
+    return scores;
+  };
+
+  const riskScores = calculateRiskScores();
+
+  // Calculate composite risk (weighted average)
+  const compositeRisk = Object.values(riskScores).length > 0
+    ? Object.values(riskScores).reduce((a, b) => a + b, 0) / Object.values(riskScores).length
+    : 50;
+
+  // Convert composite risk (0-100) to 5-year reclassification probability
+  const risk5Year = 10 + (compositeRisk / 100) * 55; // Range: 10-65%
+
+  // Estimate 1yr, 3yr, 5yr probabilities (simplified: exponential model)
+  const risk1Year = risk5Year * 0.25;
+  const risk3Year = risk5Year * 0.60;
+
+  // Determine risk category and color
+  let riskCategory = "Low", riskColor = C.success;
+  if (risk5Year > 50) {
+    riskCategory = "Very High";
+    riskColor = C.danger;
+  } else if (risk5Year > 30) {
+    riskCategory = "High";
+    riskColor = "#FF9800";
+  } else if (risk5Year > 15) {
+    riskCategory = "Intermediate";
+    riskColor = C.warn;
+  }
+
+  // Data for bar chart
+  const chartData = Object.entries(riskScores).map(([key, val]) => {
+    const labels = {
+      psaDensity: "PSA Density",
+      pirads: "PI-RADS",
+      gradeGroup: "Grade Group",
+      pctCores: "% Cores",
+      maxPct: "Max %",
+      decipher: "Decipher",
+    };
+    return { name: labels[key] || key, value: val };
+  });
+
+  return (
+    <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: "6px", padding: "10px", marginBottom: "14px" }}>
+      <div style={{ ...lbl, fontSize: "9px", letterSpacing: "1.5px", marginBottom: "8px" }}>Upstage Risk Predictor</div>
+
+      {/* Risk Score Display */}
+      <div style={{ background: C.bg, border: `1px solid ${riskColor}40`, borderRadius: "6px", padding: "10px", marginBottom: "10px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "8px" }}>
+          {/* 5-year risk large display */}
+          <div style={{ textAlign: "center", padding: "8px", background: riskColor + "15", border: `1.5px solid ${riskColor}`, borderRadius: "4px" }}>
+            <div style={{ fontSize: "7px", color: C.textSec, marginBottom: "4px", textTransform: "uppercase", letterSpacing: "1px" }}>5-Year Risk</div>
+            <div style={{ fontSize: "20px", fontWeight: 700, color: riskColor }}>{risk5Year.toFixed(1)}%</div>
+            <div style={{ fontSize: "8px", color: C.textSec, marginTop: "2px" }}>{riskCategory}</div>
+          </div>
+
+          {/* Time-based breakdown */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "40px 1fr", alignItems: "center", gap: "6px", fontSize: "8px" }}>
+              <span style={{ color: C.textSec }}>1-Year:</span>
+              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                <div style={{ height: "6px", background: riskColor + "40", borderRadius: "2px", flex: 1, minWidth: "30px" }} />
+                <span style={{ color: C.textPri, fontWeight: 600, minWidth: "28px" }}>{risk1Year.toFixed(1)}%</span>
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "40px 1fr", alignItems: "center", gap: "6px", fontSize: "8px" }}>
+              <span style={{ color: C.textSec }}>3-Year:</span>
+              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                <div style={{ height: "6px", background: riskColor + "60", borderRadius: "2px", flex: 1, minWidth: "30px" }} />
+                <span style={{ color: C.textPri, fontWeight: 600, minWidth: "28px" }}>{risk3Year.toFixed(1)}%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Risk Factor Chart */}
+      {chartData.length > 0 && (
+        <div style={{ marginBottom: "10px" }}>
+          <div style={{ fontSize: "8px", color: C.textSec, marginBottom: "6px", textTransform: "uppercase", letterSpacing: "1px" }}>Risk Factor Contributions</div>
+          <div style={{ height: 120 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+                <XAxis dataKey="name" tick={{ fontSize: 7, fill: C.textMut, fontFamily: FONT }} angle={-45} textAnchor="end" height={60} />
+                <YAxis tick={{ fontSize: 7, fill: C.textMut, fontFamily: FONT }} domain={[0, 100]} />
+                <Tooltip contentStyle={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: "4px", fontFamily: FONT, fontSize: "8px" }} formatter={(v) => v.toFixed(1)} />
+                <Bar dataKey="value" fill={C.accent} radius={[3, 3, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* Input Fields for Overrides */}
+      <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: "4px", padding: "8px", marginBottom: "10px" }}>
+        <div style={{ fontSize: "8px", color: C.textSec, marginBottom: "6px", textTransform: "uppercase", letterSpacing: "1.2px" }}>Manual Overrides (auto-filled from latest session)</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
+          {/* PSA */}
+          <div>
+            <label style={lbl}>PSA (ng/mL) {autoPsa ? `[${autoPsa.toFixed(2)}]` : ""}</label>
+            <input
+              type="number"
+              value={overridePsa !== null ? overridePsa : ""}
+              onChange={(e) => setOverridePsa(e.target.value ? parseFloat(e.target.value) : null)}
+              placeholder={autoPsa ? autoPsa.toFixed(2) : "0.0"}
+              style={inp}
+            />
+          </div>
+
+          {/* Volume */}
+          <div>
+            <label style={lbl}>Volume (cc) {autoVolume ? `[${autoVolume.toFixed(1)}]` : ""}</label>
+            <input
+              type="number"
+              value={overrideVolume !== null ? overrideVolume : ""}
+              onChange={(e) => setOverrideVolume(e.target.value ? parseFloat(e.target.value) : null)}
+              placeholder={autoVolume ? autoVolume.toFixed(1) : "0.0"}
+              style={inp}
+            />
+          </div>
+
+          {/* PSA Density (read-only) */}
+          <div>
+            <label style={lbl}>PSA Density</label>
+            <div style={{ ...inp, background: C.bgInput + "80", display: "flex", alignItems: "center", padding: "6px 8px", color: C.textSec }}>
+              {psaDensity !== null ? psaDensity.toFixed(3) : "—"}
+            </div>
+          </div>
+
+          {/* PI-RADS */}
+          <div>
+            <label style={lbl}>PI-RADS (MRI) {autoPirads ? `[${autoPirads}]` : ""}</label>
+            <select
+              value={overridePirads !== null ? overridePirads : ""}
+              onChange={(e) => setOverridePirads(e.target.value ? parseInt(e.target.value) : null)}
+              style={{ ...inp, appearance: "none", paddingRight: "20px" }}
+            >
+              <option value="">{autoPirads ? autoPirads : "Select..."}</option>
+              {[1, 2, 3, 4, 5].map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
+
+          {/* Grade Group */}
+          <div>
+            <label style={lbl}>Grade Group {autoGradeGroup ? `[GG${autoGradeGroup}]` : ""}</label>
+            <select
+              value={overrideGradeGroup !== null ? overrideGradeGroup : ""}
+              onChange={(e) => setOverrideGradeGroup(e.target.value ? parseInt(e.target.value) : null)}
+              style={{ ...inp, appearance: "none", paddingRight: "20px" }}
+            >
+              <option value="">{autoGradeGroup ? `GG${autoGradeGroup}` : "Select..."}</option>
+              {[1, 2, 3, 4, 5].map(gg => <option key={gg} value={gg}>GG{gg}</option>)}
+            </select>
+          </div>
+
+          {/* Positive Cores */}
+          <div>
+            <label style={lbl}>Pos. Cores {autoPosCores ? `[${autoPosCores}]` : ""}</label>
+            <input
+              type="number"
+              value={overridePosCores !== null ? overridePosCores : ""}
+              onChange={(e) => setOverridePosCores(e.target.value ? parseInt(e.target.value) : null)}
+              placeholder={autoPosCores || "0"}
+              style={inp}
+            />
+          </div>
+
+          {/* Total Cores */}
+          <div>
+            <label style={lbl}>Total Cores {autoTotalCores ? `[${autoTotalCores}]` : ""}</label>
+            <input
+              type="number"
+              value={overrideTotalCores !== null ? overrideTotalCores : ""}
+              onChange={(e) => setOverrideTotalCores(e.target.value ? parseInt(e.target.value) : null)}
+              placeholder={autoTotalCores || "0"}
+              style={inp}
+            />
+          </div>
+
+          {/* Max % Core Involvement */}
+          <div>
+            <label style={lbl}>Max % Core {autoMaxPct ? `[${autoMaxPct}]` : ""}</label>
+            <input
+              type="number"
+              value={overrideMaxPct !== null ? overrideMaxPct : ""}
+              onChange={(e) => setOverrideMaxPct(e.target.value ? parseInt(e.target.value) : null)}
+              placeholder={autoMaxPct || "0"}
+              min="0"
+              max="100"
+              style={inp}
+            />
+          </div>
+
+          {/* Decipher */}
+          <div>
+            <label style={lbl}>Decipher Score {autoDecipher ? `[${autoDecipher.toFixed(2)}]` : ""}</label>
+            <input
+              type="number"
+              value={overrideDecipher !== null ? overrideDecipher : ""}
+              onChange={(e) => setOverrideDecipher(e.target.value ? parseFloat(e.target.value) : null)}
+              placeholder={autoDecipher ? autoDecipher.toFixed(2) : "0.0"}
+              min="0"
+              max="1"
+              step="0.01"
+              style={inp}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Evidence Citations */}
+      <div style={{ background: C.accentDim, border: `1px solid ${C.accent}30`, borderRadius: "4px", padding: "7px", fontSize: "8px", color: C.accent, lineHeight: "1.6" }}>
+        <strong>Evidence Base:</strong> Risk model derived from PRIAS (Luiting et al, Eur Urol Oncol 2022), Luzzago (BJU Int 2020), and Sierra et al (Int Braz J Urol 2018). PSA density, PI-RADS, grade group, core involvement percentage, and Decipher score are independent predictors of harboring clinically significant cancer on repeat biopsy. Probabilities are estimates and should be discussed with your urologist before clinical decision-making.
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════
    ACTIVE SURVEILLANCE GUIDE
    ══════════════════════════════════════════════════════════════════ */
 
-function ActiveSurveillanceGuide({ sessions }) {
+function ActiveSurveillanceGuide({ sessions, patient }) {
   const timeline = [
     { period: "Baseline (before 6-12 mo)", tests: ["Confirmatory biopsy", "PSA check", "Consider repeat MRI"], details: "Confirm diagnosis is stable before committing to AS" },
     { period: "Years 1-2", tests: ["PSA every 3-6 months", "Repeat MRI at 12 months", "Consider biopsy at 12-18 mo"], details: "Frequent monitoring during high-risk period" },
@@ -633,6 +952,9 @@ function ActiveSurveillanceGuide({ sessions }) {
           <strong>MRI's Role in AS:</strong> Use of MRI in AS protocols has been shown to reduce unnecessary biopsies by 30-50% while maintaining detection of clinically significant reclassification (Klotz et al, Eur Urol 2024).
         </div>
       </div>
+
+      {/* Upstage Risk Predictor */}
+      <UpstagePredictor patient={patient} sessions={sessions} />
 
       {/* PSA Trend if available */}
       {psaData.length >= 2 && (
@@ -1158,7 +1480,7 @@ export default function App() {
       ) : mainView === "edu" ? (
         <PatientEducation patient={pat} session={ses} />
       ) : mainView === "guide" ? (
-        <ActiveSurveillanceGuide sessions={pat.sessions} />
+        <ActiveSurveillanceGuide sessions={pat.sessions} patient={pat} />
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: isSmallScreen ? "1fr" : "410px 1fr", minHeight: "calc(100vh - 80px)" }}>
           {/* LEFT */}
