@@ -1106,12 +1106,183 @@ function PrintReport({ patient, session, onClose }) {
 
         {session.treatment && (<div style={{ marginBottom: "12px", padding: "8px", border: "1px solid #ddd", borderRadius: "3px" }}><div style={{ fontSize: "10px", fontWeight: 700, marginBottom: "4px" }}>TREATMENT</div><div style={{ fontSize: "9px" }}>Modality: <strong>{session.treatment.modality}</strong> · Pattern: <strong>{session.treatment.pattern}</strong> · Date: <strong>{session.treatment.date || "—"}</strong></div>{session.treatment.notes && <div style={{ fontSize: "8px", color: "#666", marginTop: "2px" }}>{session.treatment.notes}</div>}</div>)}
 
-        <div style={{ padding: "8px", background: focalOk(session, patient) ? "#F1F8E9" : "#FFF3F3", border: `1px solid ${focalOk(session, patient) ? "#C5E1A5" : "#FFCDD2"}`, borderRadius: "3px", fontSize: "9px" }}>
+        <div style={{ padding: "8px", background: focalOk(session, patient) ? "#F1F8E9" : "#FFF3F3", border: `1px solid ${focalOk(session, patient) ? "#C5E1A5" : "#FFCDD2"}`, borderRadius: "3px", fontSize: "9px", marginBottom: "14px" }}>
           <strong>Focal Therapy:</strong> {focalOk(session, patient) ? "Potential candidate." : "Review carefully."}
         </div>
 
+        {/* ═══ NCCN RISK ASSESSMENT ═══ */}
+        {nccn.group !== null && (() => {
+          const riskName = NCCN_GROUPS[nccn.group].name;
+          const riskColor = NCCN_GROUPS[nccn.group].color;
+          const gg = mg?.gg || 0;
+          const maxI = Math.max(0, ...specs.map(s => parseInt(s.maxPct) || 0));
+          const pctPos = tot > 0 ? ((pos / tot) * 100).toFixed(0) : 0;
+          const hasAdverse = specs.some(s => s.pni || s.crib || s.idc);
+
+          // Treatment recommendations by NCCN risk
+          const txRecs = {
+            0: { primary: "Active Surveillance (preferred)", alternatives: ["Observation for limited life expectancy"], note: "Very low-risk disease — active surveillance is strongly recommended per NCCN guidelines. Treatment is generally not necessary unless reclassification occurs." },
+            1: { primary: "Active Surveillance (preferred)", alternatives: ["Radical Prostatectomy", "Radiation Therapy (EBRT or Brachytherapy)"], note: "Low-risk disease is very manageable. Active surveillance avoids side effects of treatment while closely monitoring for any changes." },
+            2: { primary: "Active Surveillance (for select patients) or Definitive Treatment", alternatives: ["Radical Prostatectomy ± PLND", "EBRT + short-term ADT (4-6 mo)", "Brachytherapy (select patients)"], note: "Favorable intermediate-risk. Active surveillance may be considered for low-volume GG2. If treatment is chosen, outcomes are excellent." },
+            3: { primary: "Radical Prostatectomy ± PLND or Radiation + ADT", alternatives: ["EBRT + short-term ADT (4-6 mo)", "Radical Prostatectomy + extended PLND"], note: "Unfavorable intermediate-risk warrants definitive treatment. Discuss goals, side effects, and quality-of-life considerations." },
+            4: { primary: "Radical Prostatectomy + ext. PLND or Radiation + long-term ADT", alternatives: ["EBRT + ADT (18-36 mo)", "EBRT + brachy boost + ADT", "Radical Prostatectomy + extended PLND"], note: "High-risk disease benefits from aggressive multimodal treatment. Imaging workup (PSMA-PET, CT, bone scan) recommended." },
+            5: { primary: "EBRT + long-term ADT ± docetaxel or RP + ext. PLND (select)", alternatives: ["EBRT + ADT (24-36 mo) ± abiraterone", "Systemic therapy", "Clinical trials"], note: "Very high-risk. Multimodal therapy is essential. Consider PSMA-PET staging and clinical trial enrollment." },
+          };
+          const rec = txRecs[nccn.group] || txRecs[1];
+
+          // AS eligibility
+          const asEligible = (nccn.group === 0 || nccn.group === 1) && gg <= 1 && !hasAdverse;
+          const asBorderline = nccn.group === 2 && gg <= 2 && pctPos < 50 && !hasAdverse;
+
+          // Upstaging risk estimate (simplified from the predictor)
+          const psaDens = nccn.density || 0;
+          const maxPirads = Math.max(0, ...session.mriLesions.map(l => l.pirads || 0));
+          let upstageRisk = 15; // baseline
+          if (psaDens >= 0.20) upstageRisk += 15; else if (psaDens >= 0.15) upstageRisk += 8; else if (psaDens >= 0.10) upstageRisk += 3;
+          if (maxPirads >= 5) upstageRisk += 20; else if (maxPirads >= 4) upstageRisk += 12; else if (maxPirads >= 3) upstageRisk += 5;
+          if (gg >= 2) upstageRisk += 12; else if (gg >= 1) upstageRisk += 0;
+          if (pctPos > 50) upstageRisk += 10; else if (pctPos > 33) upstageRisk += 5;
+          if (maxI >= 50) upstageRisk += 8;
+          upstageRisk = Math.min(85, Math.max(5, upstageRisk));
+          const upstageCategory = upstageRisk < 15 ? "Low" : upstageRisk < 30 ? "Intermediate" : upstageRisk < 50 ? "High" : "Very High";
+          const upstageColor = upstageRisk < 15 ? "#2E8B57" : upstageRisk < 30 ? "#D48F10" : upstageRisk < 50 ? "#CC6600" : "#CC3333";
+
+          return (<>
+            <div style={{ fontSize: "12px", fontWeight: 700, borderBottom: "2px solid #333", paddingBottom: "3px", marginBottom: "8px" }}>NCCN RISK ASSESSMENT</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "10px" }}>
+              <div style={{ padding: "10px", background: "#f8f8f8", borderRadius: "3px", borderLeft: `4px solid ${riskColor}` }}>
+                <div style={{ fontSize: "7px", textTransform: "uppercase", color: "#888", letterSpacing: "1px", marginBottom: "2px" }}>NCCN Risk Group</div>
+                <div style={{ fontSize: "14px", fontWeight: 700, color: riskColor }}>{riskName}</div>
+              </div>
+              <div style={{ padding: "10px", background: "#f8f8f8", borderRadius: "3px" }}>
+                <div style={{ fontSize: "7px", textTransform: "uppercase", color: "#888", letterSpacing: "1px", marginBottom: "2px" }}>Key Factors</div>
+                <div style={{ fontSize: "8px", color: "#444", lineHeight: "1.5" }}>
+                  Grade Group: {gg} · PSA: {session.psa || "—"} ng/mL<br />
+                  Stage: {patient.tStage} · Cores: {pos}/{tot} ({pctPos}%)<br />
+                  Max involvement: {maxI}% · PSA density: {nccn.density !== null ? nccn.density.toFixed(3) : "—"}
+                </div>
+              </div>
+            </div>
+
+            {/* Adverse features */}
+            {hasAdverse && (
+              <div style={{ marginBottom: "10px", padding: "6px 8px", background: "#FFF3F3", border: "1px solid #FFCDD2", borderRadius: "3px" }}>
+                <div style={{ fontSize: "8px", textTransform: "uppercase", color: "#D32F2F", letterSpacing: "1px", marginBottom: "2px", fontWeight: 700 }}>Adverse Pathological Features</div>
+                <div style={{ fontSize: "9px", color: "#333" }}>
+                  {specs.some(s => s.pni) && <span style={{ marginRight: "12px" }}>Perineural invasion (PNI) detected</span>}
+                  {specs.some(s => s.crib) && <span style={{ marginRight: "12px" }}>Cribriform pattern detected</span>}
+                  {specs.some(s => s.idc) && <span>Intraductal carcinoma (IDC) detected</span>}
+                </div>
+                <div style={{ fontSize: "8px", color: "#666", marginTop: "3px", fontStyle: "italic" }}>These features are associated with more aggressive disease behavior and may influence treatment decisions.</div>
+              </div>
+            )}
+
+            {/* Treatment Recommendations */}
+            <div style={{ marginBottom: "10px", padding: "8px", border: "1px solid #ddd", borderRadius: "3px" }}>
+              <div style={{ fontSize: "8px", textTransform: "uppercase", color: "#888", letterSpacing: "1px", marginBottom: "4px", fontWeight: 700 }}>Recommended Management Options (NCCN)</div>
+              <div style={{ fontSize: "9px", color: "#111", marginBottom: "4px" }}><strong>Primary:</strong> {rec.primary}</div>
+              <div style={{ fontSize: "8px", color: "#444", marginBottom: "4px" }}>
+                <strong>Alternatives:</strong> {rec.alternatives.join(" · ")}
+              </div>
+              <div style={{ fontSize: "8px", color: "#555", fontStyle: "italic", lineHeight: "1.4", borderTop: "1px solid #eee", paddingTop: "4px", marginTop: "4px" }}>{rec.note}</div>
+            </div>
+
+            {/* Active Surveillance Eligibility */}
+            <div style={{ marginBottom: "10px", padding: "8px", background: asEligible ? "#F1F8E9" : asBorderline ? "#FFF8E1" : "#FFF3F3", border: `1px solid ${asEligible ? "#C5E1A5" : asBorderline ? "#FFE082" : "#FFCDD2"}`, borderRadius: "3px" }}>
+              <div style={{ fontSize: "8px", textTransform: "uppercase", color: asEligible ? "#2E7D32" : asBorderline ? "#F57F17" : "#C62828", letterSpacing: "1px", marginBottom: "3px", fontWeight: 700 }}>Active Surveillance Eligibility</div>
+              {asEligible ? (
+                <div style={{ fontSize: "9px", color: "#333", lineHeight: "1.5" }}>
+                  <strong style={{ color: "#2E7D32" }}>Eligible for Active Surveillance.</strong> Per NCCN guidelines, this patient meets criteria for active surveillance with {riskName} risk disease, Grade Group {gg}, no adverse pathological features. Recommended protocol: confirmatory biopsy within 6-12 months, PSA every 3-6 months, MRI every 12 months initially.
+                </div>
+              ) : asBorderline ? (
+                <div style={{ fontSize: "9px", color: "#333", lineHeight: "1.5" }}>
+                  <strong style={{ color: "#F57F17" }}>May be considered for Active Surveillance (select patients).</strong> Favorable intermediate-risk with Grade Group {gg} and {pctPos}% positive cores. NCCN notes AS may be appropriate for select favorable intermediate-risk patients with low-volume GG2 disease. Requires shared decision-making.
+                </div>
+              ) : (
+                <div style={{ fontSize: "9px", color: "#333", lineHeight: "1.5" }}>
+                  <strong style={{ color: "#C62828" }}>Not a standard active surveillance candidate.</strong> {riskName} risk disease with Grade Group {gg}{hasAdverse ? " and adverse pathological features" : ""}. Definitive treatment is recommended per NCCN guidelines.
+                </div>
+              )}
+            </div>
+
+            {/* Upstaging Risk (for AS-eligible or borderline patients) */}
+            {(asEligible || asBorderline) && (
+              <div style={{ marginBottom: "10px", padding: "8px", border: "1px solid #ddd", borderRadius: "3px" }}>
+                <div style={{ fontSize: "8px", textTransform: "uppercase", color: "#888", letterSpacing: "1px", marginBottom: "4px", fontWeight: 700 }}>Grade Reclassification Risk on Active Surveillance</div>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "6px" }}>
+                  <div style={{ fontSize: "20px", fontWeight: 700, color: upstageColor }}>{upstageRisk}%</div>
+                  <div>
+                    <div style={{ fontSize: "9px", color: "#333" }}>Estimated 5-year reclassification probability</div>
+                    <div style={{ fontSize: "8px", color: upstageColor, fontWeight: 600 }}>{upstageCategory} Risk</div>
+                  </div>
+                </div>
+                <div style={{ fontSize: "8px", color: "#666", lineHeight: "1.4" }}>
+                  Based on PSA density ({nccn.density !== null ? nccn.density.toFixed(3) : "N/A"}), PI-RADS ({maxPirads || "N/A"}), Grade Group ({gg}), positive core ratio ({pctPos}%), and max involvement ({maxI}%). Derived from published AS cohort data (PRIAS, Luzzago et al).
+                </div>
+              </div>
+            )}
+
+            {/* Bilateral Disease */}
+            {(() => {
+              const rightPos = Object.entries(session.specimens).filter(([z, s]) => z.startsWith("R ") && s.gleason && s.gleason !== "benign").length;
+              const leftPos = Object.entries(session.specimens).filter(([z, s]) => z.startsWith("L ") && s.gleason && s.gleason !== "benign").length;
+              const bilat = rightPos > 0 && leftPos > 0;
+              return (
+                <div style={{ marginBottom: "10px", padding: "6px 8px", border: "1px solid #ddd", borderRadius: "3px" }}>
+                  <div style={{ fontSize: "8px", textTransform: "uppercase", color: "#888", letterSpacing: "1px", marginBottom: "2px" }}>Disease Distribution</div>
+                  <div style={{ fontSize: "9px", color: "#333" }}>
+                    {bilat ? (
+                      <><strong style={{ color: "#D32F2F" }}>Bilateral</strong> — Cancer in both lobes (Right: {rightPos} zones, Left: {leftPos} zones). May affect focal therapy candidacy.</>
+                    ) : rightPos > 0 ? (
+                      <><strong style={{ color: "#2E7D32" }}>Unilateral (Right)</strong> — Cancer limited to right lobe ({rightPos} zone{rightPos > 1 ? "s" : ""}). Favorable for focal therapy consideration.</>
+                    ) : leftPos > 0 ? (
+                      <><strong style={{ color: "#2E7D32" }}>Unilateral (Left)</strong> — Cancer limited to left lobe ({leftPos} zone{leftPos > 1 ? "s" : ""}). Favorable for focal therapy consideration.</>
+                    ) : (
+                      <>No cancer zones mapped.</>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Imaging Recommendations */}
+            <div style={{ marginBottom: "10px", padding: "6px 8px", border: "1px solid #ddd", borderRadius: "3px" }}>
+              <div style={{ fontSize: "8px", textTransform: "uppercase", color: "#888", letterSpacing: "1px", marginBottom: "3px", fontWeight: 700 }}>Recommended Staging Workup</div>
+              <div style={{ fontSize: "8px", color: "#333", lineHeight: "1.5" }}>
+                {nccn.group <= 1 ? (
+                  <>No routine imaging required for {riskName} risk. Consider mpMRI if not yet obtained for AS planning.</>
+                ) : nccn.group <= 3 ? (
+                  <>Consider bone scan if PSA &gt;10 or symptoms. CT/MRI abdomen-pelvis if unfavorable features. PSMA-PET/CT may be considered per NCCN.</>
+                ) : (
+                  <>Bone scan, CT or MRI of abdomen/pelvis recommended. <strong>PSMA-PET/CT strongly recommended</strong> for high-risk and very high-risk disease per NCCN 2024 guidelines.</>
+                )}
+              </div>
+            </div>
+          </>);
+        })()}
+
+        {/* Patient-Friendly Summary */}
+        {nccn.group !== null && (
+          <div style={{ marginBottom: "14px", padding: "10px", background: "#F0F7FF", border: "1px solid #BBDEFB", borderRadius: "3px" }}>
+            <div style={{ fontSize: "10px", fontWeight: 700, color: "#1565C0", marginBottom: "6px" }}>PATIENT SUMMARY — What This Means for You</div>
+            <div style={{ fontSize: "9px", color: "#333", lineHeight: "1.6" }}>
+              {nccn.group <= 1 ? (
+                <>Your biopsy results show <strong>very favorable findings</strong>. The cancer is low-grade (slow-growing) and limited in extent. Active surveillance — closely monitoring your cancer with regular PSA tests, MRI scans, and periodic biopsies — is the recommended approach. This avoids the side effects of surgery or radiation while ensuring your cancer is watched carefully. Most men in your situation do very well long-term.</>
+              ) : nccn.group === 2 ? (
+                <>Your biopsy shows <strong>favorable intermediate-risk</strong> findings. You have several good treatment options to discuss with your urologist, including active surveillance (for select patients), surgery (radical prostatectomy), or radiation therapy. The prognosis is very good with any of these approaches — cure rates exceed 90% for this risk category.</>
+              ) : nccn.group === 3 ? (
+                <>Your biopsy shows <strong>unfavorable intermediate-risk</strong> findings. Definitive treatment (surgery or radiation) is recommended. Your urologist will discuss which approach is best for your situation, considering your age, health, and preferences. With appropriate treatment, outcomes remain excellent for this category.</>
+              ) : nccn.group === 4 ? (
+                <>Your biopsy shows <strong>high-risk</strong> findings. Prompt, definitive treatment with surgery or radiation (often combined with hormone therapy) is recommended. Additional imaging (bone scan, PSMA-PET) is important to check that the cancer has not spread. With aggressive treatment, many men with high-risk prostate cancer can still be cured.</>
+              ) : (
+                <>Your biopsy shows <strong>very high-risk</strong> findings. A comprehensive treatment plan involving multiple therapies is recommended. Your medical team will likely recommend imaging to fully stage your cancer and may discuss clinical trials. While this is a serious diagnosis, modern treatments offer meaningful benefit and improved outcomes.</>
+              )}
+            </div>
+          </div>
+        )}
+
         <div style={{ marginTop: "24px", borderTop: "1px solid #ddd", paddingTop: "6px", fontSize: "7px", color: "#999", textAlign: "center" }}>
-          Prostate Biopsy Mapper · {new Date().toLocaleDateString()} · Verify all data before clinical decisions
+          Prostate Biopsy Mapper · {new Date().toLocaleDateString()} · Verify all data before clinical decisions · Treatment recommendations per NCCN Guidelines v2024
         </div>
       </div>
     </div>
