@@ -329,10 +329,239 @@ function RiskPanel({ session, patient }) {
 
       {adv.length > 0 && <div style={{ background: C.dangerDim, border: `1px solid ${C.danger}25`, borderRadius: "4px", padding: "5px 7px", marginBottom: "6px", fontSize: "9px", color: C.danger, fontFamily: FONT }}>⚠ {[...new Set([...adv.filter(s => s.pni).map(() => "PNI"), ...adv.filter(s => s.crib).map(() => "Cribriform"), ...adv.filter(s => s.idc).map(() => "IDC-P")])].join(", ")}</div>}
 
-      <div style={{ background: focalOk ? C.successDim : C.dangerDim, border: `1px solid ${focalOk ? C.success : C.danger}25`, borderRadius: "4px", padding: "6px" }}>
+      <div style={{ background: focalOk ? C.successDim : C.dangerDim, border: `1px solid ${focalOk ? C.success : C.danger}25`, borderRadius: "4px", padding: "6px", marginBottom: "6px" }}>
         <div style={{ ...lbl, fontSize: "7px" }}>Focal Therapy</div>
         <div style={{ color: focalOk ? C.success : C.danger, fontSize: "10px", fontFamily: FONT, fontWeight: 700 }}>{focalOk ? "POTENTIAL CANDIDATE" : "REVIEW"}</div>
       </div>
+
+      {nccn.group !== null && (
+        <div style={{ background: C.accentDim, border: `1px solid ${C.accent}30`, borderRadius: "4px", padding: "6px" }}>
+          <div style={{ ...lbl, fontSize: "7px", marginBottom: "3px" }}>Recommended Options</div>
+          <div style={{ fontSize: "9px", color: C.accent, fontFamily: FONT, lineHeight: "1.4" }}>
+            {nccn.group === 0 ? "Active Surveillance (preferred)" : nccn.group === 1 ? "Active Surveillance or Definitive Tx" : nccn.group === 2 ? "Active Surveillance (selective) or Definitive Tx" : nccn.group === 3 ? "Definitive Treatment" : "Aggressive Multimodal Tx"}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   PATIENT EDUCATION
+   ══════════════════════════════════════════════════════════════════ */
+
+const TREATMENT_COMPARISON_DATA = [
+  { treatment: "Active Surveillance", cancerControl: "~97%", incontinence: "Rare", dysfunction: "Rare", bowel: "None", recovery: "—", retreatment: "N/A", nccn: "VL, L, FI" },
+  { treatment: "Radical Prostatectomy", cancerControl: "~97%", incontinence: "13%", dysfunction: "73%", bowel: "14%", recovery: "2-4 weeks", retreatment: "Rare", nccn: "All risk groups" },
+  { treatment: "EBRT/IMRT", cancerControl: "~97%", incontinence: "6%", dysfunction: "77%", bowel: "34%", recovery: "7-9 weeks", retreatment: "Uncommon", nccn: "All risk groups" },
+  { treatment: "Brachytherapy (LDR)", cancerControl: "~97%", incontinence: "5%", dysfunction: "50-60%", bowel: "8%", recovery: "1-2 weeks", retreatment: "Uncommon", nccn: "Low-FI risk" },
+  { treatment: "Focal Therapy (HIFU/Cryo/IRE)", cancerControl: "~95%*", incontinence: "3-5%", dysfunction: "50%", bowel: "Minimal", recovery: "1-2 weeks", retreatment: "10-15%", nccn: "Selected cases" },
+];
+
+const OUTCOME_DATA = {
+  0: { risk: "Very Low", css15: ">99%", mfs10: ">99%", as: "STRONGLY recommended", focal: "Not applicable" },
+  1: { risk: "Low", css15: ">99%", mfs10: "98%", as: "PREFERRED", focal: "Not applicable" },
+  2: { risk: "Favorable Intermediate", css15: "~97%", mfs10: "95%", as: "SELECTIVE (low volume)", focal: "Selective candidate" },
+  3: { risk: "Unfavorable Intermediate", css15: "~93%", mfs10: "90%", as: "NOT recommended", focal: "Case-dependent" },
+  4: { risk: "High", css15: "~85%", mfs10: "80%", as: "NOT recommended", focal: "NOT recommended" },
+  5: { risk: "Very High", css15: "~70%", mfs10: "65%", as: "NOT recommended", focal: "NOT recommended" },
+};
+
+function FaqAccordion() {
+  const [open, setOpen] = useState({});
+  const faqs = [
+    { q: "What does my Gleason score/Grade Group mean?", a: "Your Gleason score is the sum of two numbers (each 1-5) that describe how abnormal your cancer cells look. Grade Groups (GG) simplify this: GG1 (3+3) is low-grade, GG2 (3+4) is intermediate, GG3 (4+3) and above are higher-grade. Higher grades generally indicate more aggressive cancers. Grade Groups help predict outcomes and guide treatment decisions." },
+    { q: "What is PI-RADS and what does my score mean?", a: "PI-RADS (Prostate Imaging-Reporting and Data System) is a 1-5 scoring system for MRI findings. Score 1-2 = very low cancer likelihood; 3 = intermediate; 4 = high likelihood; 5 = very high likelihood of clinically significant cancer. PI-RADS helps identify areas that need biopsy or closer monitoring." },
+    { q: "What is PSA density and why does it matter?", a: "PSA density is your PSA level divided by prostate volume (cc). A PSA of 5 ng/mL from a 50 cc prostate (density 0.1) is more concerning than the same PSA from a 100 cc prostate (density 0.05). Density helps interpret PSA in context—lower density typically suggests lower cancer risk. Density <0.15 is generally reassuring." },
+    { q: "Am I a candidate for active surveillance?", a: "Active surveillance (AS) is a monitoring strategy for very low and low-risk cancers. Good candidates typically have: low Gleason score (GG1-2), PSA <10, low PSA density, no concerning imaging, and limited cancer in biopsies. AS involves regular PSA checks every 3-6 months, periodic MRI, and repeat biopsies. About 30-50% eventually need treatment, usually within 5 years." },
+    { q: "What are the differences between surgery and radiation?", a: "Surgery (prostatectomy) removes the prostate; radiation delivers high-dose beams from outside. Surgery offers a single procedure (2-4 week recovery) but has upfront risks. Radiation requires 7-9 weeks of daily treatments with potentially different late side effects. Both cure similar percentages of early cancers (~97%). Choice depends on age, health, and preferences." },
+    { q: "What is focal therapy and am I a candidate?", a: "Focal therapy treats only the cancer area, not the whole prostate. Options include HIFU (sound waves), cryotherapy (freezing), IRE (electrical), or laser. Benefits: less side effects, faster recovery. Drawbacks: emerging data (not yet standard), risk of residual disease, may need future treatment. Candidates typically have unilateral (one-side) disease, low volume, and no high-risk features." },
+    { q: "What are genomic tests and do I need one?", a: "Genomic tests (Decipher, Oncotype DX, Prolaris) analyze cancer genes to predict aggressiveness beyond grade/PSA alone. They can help refine risk stratification and inform treatment decisions, especially in borderline cases. Not needed for clearly low or very high risk. Discuss with your doctor if your case would benefit from genetic testing." },
+    { q: "What does PNI/Cribriform/IDC-P mean for my prognosis?", a: "PNI (Perineural Invasion): cancer cells tracking along nerve sheaths—suggests higher risk. Cribriform pattern: aggressive cancer growth pattern. IDC-P (Intraductal carcinoma): cells filling ducts—associated with worse outcomes. Presence of any of these features typically prompts consideration of more aggressive treatment even if grade seems favorable." },
+    { q: "What is the timeline for treatment decisions?", a: "Most men have weeks to months to decide, especially for low/intermediate risk. Very high-risk cases warrant prompt treatment discussion. Active surveillance has a defined protocol: confirmatory biopsy 6-12 months after diagnosis, then periodic monitoring. Don't rush, but don't delay unnecessarily—discuss specific timeline with your team." },
+    { q: "What questions should I ask my urologist?", a: "Key questions: (1) What is my NCCN risk group? (2) What are my treatment options? (3) What are realistic outcomes and side effects for my case? (4) Am I a candidate for active surveillance or focal therapy? (5) What do genomic tests show? (6) What happens if I choose watchful waiting and then need treatment? (7) What is the follow-up plan? (8) When should I consider a second opinion?" },
+  ];
+  return (
+    <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: "6px", padding: "10px" }}>
+      <div style={{ ...lbl, fontSize: "9px", letterSpacing: "1.5px", marginBottom: "8px" }}>Patient FAQ</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+        {faqs.map((faq, i) => (
+          <div key={i} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: "4px", overflow: "hidden" }}>
+            <button onClick={() => setOpen({ ...open, [i]: !open[i] })} style={{ width: "100%", padding: "8px 10px", textAlign: "left", background: "transparent", border: "none", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", color: C.textPri, fontSize: "9px", fontFamily: FONT }}>
+              <span style={{ fontWeight: 600 }}>{faq.q}</span>
+              <span style={{ fontSize: "11px", opacity: 0.6 }}>{open[i] ? "▼" : "▶"}</span>
+            </button>
+            {open[i] && <div style={{ padding: "8px 10px", borderTop: `1px solid ${C.border}`, fontSize: "9px", color: C.textSec, lineHeight: "1.5", fontFamily: FONT }}>{faq.a}</div>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PatientEducation({ patient, session }) {
+  const specs = allSpecs(session);
+  const nccn = computeNCCN(session.psa, patient.tStage, patient.volume, specs);
+  const outcomes = nccn.group !== null ? OUTCOME_DATA[nccn.group] : null;
+
+  return (
+    <div style={{ padding: "14px", maxWidth: "1000px", margin: "0 auto", overflowY: "auto" }}>
+      {/* Disclaimer */}
+      <div style={{ background: C.warnDim, border: `1px solid ${C.warn}40`, borderRadius: "6px", padding: "10px", marginBottom: "14px" }}>
+        <div style={{ fontSize: "9px", fontWeight: 700, color: C.warn, marginBottom: "3px" }}>⚠ FOR INFORMATIONAL PURPOSES ONLY</div>
+        <div style={{ fontSize: "8px", color: C.warn, opacity: 0.9 }}>This educational content is general information and is NOT a substitute for medical advice. All clinical decisions should be made in consultation with your urologist. Data sources: ProtecT 2023, Swedish RARP vs RT 2024, Tay et al 2024.</div>
+      </div>
+
+      {/* Treatment Comparison */}
+      <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: "6px", padding: "10px", marginBottom: "14px" }}>
+        <div style={{ ...lbl, fontSize: "9px", letterSpacing: "1.5px", marginBottom: "8px" }}>Treatment Comparison Matrix</div>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "8px", fontFamily: FONT }}>
+            <thead>
+              <tr style={{ borderBottom: `2px solid ${C.border}` }}>
+                {["Treatment", "Cancer Control@15yr", "Incontinence", "Erectile Dysfunction", "Bowel Symptoms", "Recovery", "Retreatment", "NCCN Recommended For"].map(h => (
+                  <th key={h} style={{ padding: "6px 4px", textAlign: "left", color: C.textSec, fontWeight: 600, borderRight: `1px solid ${C.border}20` }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {TREATMENT_COMPARISON_DATA.map((row, i) => (
+                <tr key={i} style={{ borderBottom: `1px solid ${C.border}15` }}>
+                  <td style={{ padding: "6px 4px", fontWeight: 600, color: C.textPri }}>{row.treatment}</td>
+                  <td style={{ padding: "6px 4px", color: C.success }}>{row.cancerControl}</td>
+                  <td style={{ padding: "6px 4px" }}>{row.incontinence}</td>
+                  <td style={{ padding: "6px 4px" }}>{row.dysfunction}</td>
+                  <td style={{ padding: "6px 4px" }}>{row.bowel}</td>
+                  <td style={{ padding: "6px 4px" }}>{row.recovery}</td>
+                  <td style={{ padding: "6px 4px" }}>{row.retreatment}</td>
+                  <td style={{ padding: "6px 4px", fontSize: "7px" }}>{row.nccn}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Risk-Stratified Outcomes */}
+      {outcomes && (
+        <div style={{ background: C.bgCard, border: `1px solid ${NCCN_GROUPS[nccn.group].color}40`, borderRadius: "6px", padding: "10px", marginBottom: "14px" }}>
+          <div style={{ ...lbl, fontSize: "9px", letterSpacing: "1.5px", marginBottom: "8px" }}>Your Risk Group: <span style={{ color: NCCN_GROUPS[nccn.group].color }}>{outcomes.risk}</span></div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "8px" }}>
+            <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: "4px", padding: "8px" }}>
+              <div style={{ ...lbl, fontSize: "7px", marginBottom: "2px" }}>15-Year Cancer-Specific Survival</div>
+              <div style={{ fontSize: "12px", fontWeight: 700, color: C.success }}>{outcomes.css15}</div>
+            </div>
+            <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: "4px", padding: "8px" }}>
+              <div style={{ ...lbl, fontSize: "7px", marginBottom: "2px" }}>10-Year Metastasis-Free Survival</div>
+              <div style={{ fontSize: "12px", fontWeight: 700, color: C.success }}>{outcomes.mfs10}</div>
+            </div>
+            <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: "4px", padding: "8px" }}>
+              <div style={{ ...lbl, fontSize: "7px", marginBottom: "2px" }}>Active Surveillance Eligibility</div>
+              <div style={{ fontSize: "11px", fontWeight: 600, color: C.accent }}>{outcomes.as}</div>
+            </div>
+            <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: "4px", padding: "8px" }}>
+              <div style={{ ...lbl, fontSize: "7px", marginBottom: "2px" }}>Focal Therapy Candidacy</div>
+              <div style={{ fontSize: "11px", fontWeight: 600, color: C.accent }}>{outcomes.focal}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* FAQ */}
+      <FaqAccordion />
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   ACTIVE SURVEILLANCE GUIDE
+   ══════════════════════════════════════════════════════════════════ */
+
+function ActiveSurveillanceGuide({ sessions }) {
+  const timeline = [
+    { period: "Baseline (before 6-12 mo)", tests: ["Confirmatory biopsy", "PSA check", "Consider repeat MRI"], details: "Confirm diagnosis is stable before committing to AS" },
+    { period: "Years 1-2", tests: ["PSA every 3-6 months", "Repeat MRI at 12 months", "Consider biopsy at 12-18 mo"], details: "Frequent monitoring during high-risk period" },
+    { period: "Years 2-5", tests: ["PSA every 6 months", "MRI every 1-2 years", "Biopsy every 2-3 years if stable"], details: "Less frequent monitoring if stable" },
+    { period: "Year 5+", tests: ["PSA every 6-12 months", "MRI every 2 years", "Biopsy if PSA velocity increases"], details: "Continued long-term surveillance" },
+  ];
+
+  const triggers = [
+    "PSA velocity >0.75 ng/mL/year (or >0.5 in some protocols)",
+    "Gleason grade reclassification on repeat biopsy",
+    "Increased cancer volume (cores positive, % involvement)",
+    "New or enlarging lesions on MRI",
+    "Patient age >75 years (may shift to observation)",
+    "Patient preference for treatment",
+  ];
+
+  const psaData = sessions
+    .filter(s => s.psa && s.date)
+    .map(s => ({ date: s.date, psa: parseFloat(s.psa), label: s.label || s.date }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  return (
+    <div style={{ padding: "14px", maxWidth: "900px", margin: "0 auto", overflowY: "auto" }}>
+      {/* Disclaimer */}
+      <div style={{ background: C.warnDim, border: `1px solid ${C.warn}40`, borderRadius: "6px", padding: "10px", marginBottom: "14px" }}>
+        <div style={{ fontSize: "9px", fontWeight: 700, color: C.warn, marginBottom: "3px" }}>ℹ PROTOCOL OVERVIEW</div>
+        <div style={{ fontSize: "8px", color: C.warn, opacity: 0.9 }}>This is a general AS monitoring framework. Specific protocols vary (NCCN, Memorial Sloan Kettering, Johns Hopkins). Your urologist will customize the schedule based on your individual risk factors.</div>
+      </div>
+
+      {/* Timeline */}
+      <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: "6px", padding: "10px", marginBottom: "14px" }}>
+        <div style={{ ...lbl, fontSize: "9px", letterSpacing: "1.5px", marginBottom: "8px" }}>Monitoring Timeline</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          {timeline.map((item, i) => (
+            <div key={i} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: "4px", padding: "8px", display: "grid", gridTemplateColumns: "180px 1fr", gap: "8px" }}>
+              <div style={{ fontWeight: 600, color: C.accent, fontSize: "9px" }}>{item.period}</div>
+              <div>
+                <div style={{ fontSize: "8px", color: C.textSec, marginBottom: "3px" }}>
+                  {item.tests.map((t, j) => (
+                    <div key={j}>• {t}</div>
+                  ))}
+                </div>
+                <div style={{ fontSize: "8px", color: C.textMut, fontStyle: "italic" }}>{item.details}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Triggers for intervention */}
+      <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: "6px", padding: "10px", marginBottom: "14px" }}>
+        <div style={{ ...lbl, fontSize: "9px", letterSpacing: "1.5px", marginBottom: "8px", color: C.danger }}>Triggers for Treatment Consideration</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+          {triggers.map((trigger, i) => (
+            <div key={i} style={{ fontSize: "9px", color: C.textSec, padding: "4px 6px", background: C.bg, borderRadius: "3px", borderLeft: `3px solid ${C.danger}` }}>
+              {trigger}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* PSA Trend if available */}
+      {psaData.length >= 2 && (
+        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: "6px", padding: "10px" }}>
+          <div style={{ ...lbl, fontSize: "9px", letterSpacing: "1.5px", marginBottom: "8px" }}>Your PSA Trend</div>
+          <div style={{ height: 140 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={psaData} margin={{ top: 5, right: 10, left: -15, bottom: 5 }}>
+                <defs>
+                  <linearGradient id="asGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={C.accent} stopOpacity={0.3} />
+                    <stop offset="95%" stopColor={C.accent} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+                <XAxis dataKey="date" tick={{ fontSize: 7, fill: C.textMut, fontFamily: FONT }} />
+                <YAxis tick={{ fontSize: 7, fill: C.textMut, fontFamily: FONT }} />
+                <Tooltip contentStyle={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: "4px", fontFamily: FONT, fontSize: "9px" }} />
+                <Area type="monotone" dataKey="psa" stroke={C.accent} fill="url(#asGrad)" strokeWidth={2} dot={{ r: 2.5, fill: C.accent }} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -504,7 +733,7 @@ export default function App() {
           </div>
         </div>
         <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
-          <Tabs tabs={[{ key: "map", label: "Map" }, { key: "kinetics", label: "PSA" }, { key: "compare", label: "Compare" }]} active={mainView} onSelect={setMainView} small />
+          <Tabs tabs={[{ key: "map", label: "Map" }, { key: "kinetics", label: "PSA" }, { key: "compare", label: "Compare" }, { key: "edu", label: "Edu" }, { key: "guide", label: "Guide" }]} active={mainView} onSelect={setMainView} small />
           <button onClick={() => setShowPrint(true)} style={{ ...btn, background: "#1A2E1A", color: C.success, border: `1px solid ${C.success}30`, padding: "3px 8px" }}>Print</button>
           <button onClick={exportJSON} style={{ ...btn, background: C.accentDim, color: C.accent, border: `1px solid ${C.accent}30`, padding: "3px 8px" }}>JSON↓</button>
           <button onClick={() => importRef.current?.click()} style={{ ...btn, background: C.bgInput, color: C.textSec, border: `1px solid ${C.border}`, padding: "3px 8px" }}>Import</button>
@@ -575,6 +804,10 @@ export default function App() {
         <div style={{ padding: "14px", maxWidth: "800px", margin: "0 auto" }}><PSAKinetics sessions={pat.sessions} /></div>
       ) : mainView === "compare" ? (
         <SessionCompare sessions={pat.sessions} />
+      ) : mainView === "edu" ? (
+        <PatientEducation patient={pat} session={ses} />
+      ) : mainView === "guide" ? (
+        <ActiveSurveillanceGuide sessions={pat.sessions} />
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "410px 1fr", minHeight: "calc(100vh - 80px)" }}>
           {/* LEFT */}
