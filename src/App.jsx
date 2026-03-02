@@ -71,7 +71,7 @@ const btn = { fontFamily: FONT, fontSize: "9px", textTransform: "uppercase", let
 
 /* ── factories ── */
 const mkSpec = () => ({ gleason: null, coresPos: "", coresTotal: "", maxPct: "", pni: false, crib: false, idc: false, notes: "" });
-const mkSession = (n) => ({ id: Date.now(), label: n || "", date: "", psa: "", type: "diagnostic", specimens: ZONES.reduce((a, z) => { a[z] = mkSpec(); return a; }, {}), mriLesions: [], targetedBx: [], focalPlan: null, treatment: null, genomics: { decipher: "", oncotype: "", prolaris: "" }, mriImageData: null });
+const mkSession = (n) => ({ id: Date.now(), label: n || "", date: "", psa: "", type: "diagnostic", specimens: ZONES.reduce((a, z) => { a[z] = mkSpec(); return a; }, {}), mriLesions: [], targetedBx: [], focalPlan: null, treatment: null, genomics: { decipher: "", oncotype: "", prolaris: "" }, mriImageData: null, ipss: null, shim: null, postTxMonitoring: null });
 const mkLesion = (n) => ({ id: Date.now(), name: n || "", sector: MRI_SECTORS[0], pirads: 3, sizeMm: "", x: 210, y: 150, notes: "" });
 const mkTargetBx = (lid) => ({ id: Date.now(), lesionId: lid, gleason: null, coresPos: "", coresTotal: "", maxPct: "", pni: false, crib: false, idc: false, notes: "" });
 const mkPatient = () => ({ id: Date.now(), mrn: "", dob: "", tStage: "cT1c", volume: "", sessions: [mkSession("Biopsy 1")], notes: "" });
@@ -836,6 +836,8 @@ export default function App() {
                 { key: "targeted", label: `Tgt (${tgtCount})` },
                 { key: "focal", label: "Focal Plan" },
                 { key: "treatment", label: "Treatment" },
+                { key: "tools", label: "Tools" },
+                { key: "post-tx", label: "Post-Tx" },
                 { key: "genomics", label: "Genomics" },
               ]} active={panel} onSelect={setPanel} small />
             </div>
@@ -882,6 +884,7 @@ export default function App() {
                           <div><div style={lbl}>Size mm</div><input type="number" value={l.sizeMm} onChange={e => setSes(s => ({ ...s, mriLesions: s.mriLesions.map(x => x.id === l.id ? { ...x, sizeMm: e.target.value } : x) }))} style={inp} /></div>
                         </div>
                         <div style={{ marginBottom: "6px" }}><div style={lbl}>PI-RADS</div><div style={{ display: "flex", gap: "3px" }}>{PIRADS_LIST.map(p => <button key={p.value} onClick={() => setSes(s => ({ ...s, mriLesions: s.mriLesions.map(x => x.id === l.id ? { ...x, pirads: p.value } : x) }))} style={{ flex: 1, padding: "4px", borderRadius: "3px", cursor: "pointer", background: l.pirads === p.value ? p.color + "25" : C.bgInput, border: `1.5px solid ${l.pirads === p.value ? p.color : C.border}`, color: l.pirads === p.value ? p.color : C.textMut, fontSize: "10px", fontFamily: FONT, fontWeight: l.pirads === p.value ? 700 : 400, textAlign: "center" }}>{p.value}</button>)}</div></div>
+                        {(() => { const probs = { 1: "~3%", 2: "~6%", 3: "~15%", 4: "~43%", 5: "~77%" }; const prob = probs[l.pirads]; return <div style={{ background: C.bgInput, border: `1px solid ${C.border}`, borderRadius: "3px", padding: "5px 6px", marginBottom: "6px", fontSize: "8px", color: C.textSec }}><div style={{ ...lbl, fontSize: "7px", marginBottom: "2px" }}>csPCa Risk</div><div style={{ fontSize: "12px", fontFamily: FONT, fontWeight: 600, color: l.pirads <= 2 ? C.success : l.pirads === 3 ? C.warn : C.danger }}>{prob}</div></div>; })()}
                         <div style={{ marginBottom: "6px" }}><div style={lbl}>Sector</div><select value={l.sector} onChange={e => setSes(s => ({ ...s, mriLesions: s.mriLesions.map(x => x.id === l.id ? { ...x, sector: e.target.value } : x) }))} style={{ ...inp, appearance: "auto" }}>{MRI_SECTORS.map(s => <option key={s}>{s}</option>)}</select></div>
                         <div><div style={lbl}>Notes</div><textarea value={l.notes} onChange={e => setSes(s => ({ ...s, mriLesions: s.mriLesions.map(x => x.id === l.id ? { ...x, notes: e.target.value } : x) }))} rows={2} style={{ ...inp, resize: "vertical" }} /></div>
                       </div>
@@ -977,6 +980,214 @@ export default function App() {
                 <div style={{ marginBottom: "10px" }}><div style={lbl}>Pattern Treated</div><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "3px" }}>{FOCAL_PATTERNS.map(p => { const on = ses.treatment?.pattern === p; return <button key={p} onClick={() => setSes(s => ({ ...s, treatment: { ...(s.treatment || {}), pattern: p } }))} style={{ ...btn, padding: "5px 6px", fontSize: "8px", background: on ? "#FF980020" : C.bgInput, border: `1.5px solid ${on ? "#FF9800" : C.border}`, color: on ? "#FF9800" : C.textSec, textAlign: "left" }}>{p}</button>; })}</div></div>
                 <div style={{ marginBottom: "10px" }}><div style={lbl}>Parameters / Notes</div><textarea value={ses.treatment?.notes || ""} onChange={e => setSes(s => ({ ...s, treatment: { ...(s.treatment || {}), notes: e.target.value } }))} rows={3} style={{ ...inp, resize: "vertical" }} placeholder="Energy settings, duration, coverage details..." /></div>
                 {ses.treatment?.pattern && <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: "4px", padding: "6px", fontSize: "9px", color: C.textSec }}><div style={{ ...lbl, fontSize: "7px" }}>Zones Treated</div>{ZONES.filter(z => isZoneInPattern(z, ses.treatment.pattern)).map(z => <span key={z} style={{ marginRight: "6px" }}>{z}</span>)}</div>}
+              </div>
+            )}
+
+            {/* ── TOOLS: Clinical Assessment ── */}
+            {panel === "tools" && (
+              <div>
+                <div style={{ fontSize: "11px", fontWeight: 600, marginBottom: "10px" }}>Clinical Assessment Tools</div>
+
+                {/* IPSS Calculator */}
+                <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: "5px", padding: "10px", marginBottom: "10px" }}>
+                  <div style={{ ...lbl, fontSize: "9px", marginBottom: "6px", fontWeight: 700 }}>IPSS (Urinary Symptoms)</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "5px", marginBottom: "8px" }}>
+                    {[
+                      { q: 1, label: "Incomplete Emptying", help: "0=Not at all, 5=Almost always" },
+                      { q: 2, label: "Frequency", help: "0=<1/day, 5=>5/day" },
+                      { q: 3, label: "Intermittency", help: "0=Never, 5=Always" },
+                      { q: 4, label: "Urgency", help: "0=None, 5=Severe" },
+                      { q: 5, label: "Weak Stream", help: "0=Not weak, 5=Very weak" },
+                      { q: 6, label: "Straining", help: "0=Never, 5=Always" },
+                      { q: 7, label: "Nocturia", help: "0=None, 5=5+ times" }
+                    ].map(({ q, label, help }) => (
+                      <div key={q}>
+                        <div style={{ fontSize: "9px", color: C.textSec, marginBottom: "2px" }}>{label} <span style={{ fontSize: "7px", color: C.textMut }}>({help})</span></div>
+                        <select
+                          value={ses.ipss?.[`q${q}`] || ""}
+                          onChange={e => setSes(s => ({ ...s, ipss: { ...(s.ipss || {}), [`q${q}`]: parseInt(e.target.value) } }))}
+                          style={{ ...inp, appearance: "auto" }}
+                        >
+                          <option value="">—</option>
+                          {[0, 1, 2, 3, 4, 5].map(v => <option key={v}>{v}</option>)}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ background: C.bgInput, border: `1px solid ${C.border}`, borderRadius: "3px", padding: "6px", marginBottom: "6px" }}>
+                    <div style={{ ...lbl, fontSize: "7px", marginBottom: "2px" }}>Quality of Life</div>
+                    <select
+                      value={ses.ipss?.qol || ""}
+                      onChange={e => setSes(s => ({ ...s, ipss: { ...(s.ipss || {}), qol: parseInt(e.target.value) } }))}
+                      style={{ ...inp, appearance: "auto", fontSize: "10px" }}
+                    >
+                      <option value="">—</option>
+                      <option value="0">0: Delighted</option>
+                      <option value="1">1: Pleased</option>
+                      <option value="2">2: Mostly satisfied</option>
+                      <option value="3">3: Mixed</option>
+                      <option value="4">4: Mostly dissatisfied</option>
+                      <option value="5">5: Unhappy</option>
+                      <option value="6">6: Terrible</option>
+                    </select>
+                  </div>
+                  {(() => {
+                    const total = ses.ipss ? [1, 2, 3, 4, 5, 6, 7].reduce((s, i) => s + (ses.ipss[`q${i}`] || 0), 0) : null;
+                    const interpretation = total !== null ? (total <= 7 ? "Mild" : total <= 19 ? "Moderate" : "Severe") : null;
+                    const intColor = total !== null ? (total <= 7 ? C.success : total <= 19 ? C.warn : C.danger) : C.textMut;
+                    return total !== null ? (
+                      <div style={{ background: intColor + "15", border: `1px solid ${intColor}40`, borderRadius: "3px", padding: "5px 6px", fontSize: "9px", color: intColor, fontWeight: 700 }}>
+                        IPSS Score: {total} ({interpretation})
+                        {ses.ipss?.qol !== undefined && ses.ipss.qol !== "" && <div style={{ fontSize: "8px", marginTop: "2px", fontWeight: 400, color: C.textSec }}>QoL: {ses.ipss.qol}</div>}
+                      </div>
+                    ) : null;
+                  })()}
+                </div>
+
+                {/* SHIM Calculator */}
+                <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: "5px", padding: "10px", marginBottom: "10px" }}>
+                  <div style={{ ...lbl, fontSize: "9px", marginBottom: "6px", fontWeight: 700 }}>SHIM (Erectile Function Baseline)</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "5px", marginBottom: "8px" }}>
+                    {[
+                      { q: 1, label: "Confidence in Getting Erection", options: ["No", "Low", "Moderate", "High", "Very High"] },
+                      { q: 2, label: "Hardness for Penetration", options: ["Absent", "Difficult", "Moderate", "Good", "Always"] },
+                      { q: 3, label: "Maintaining After Penetration", options: ["Absent", "Difficult", "Moderate", "Good", "Always"] },
+                      { q: 4, label: "Maintaining to Completion", options: ["Absent", "Difficult", "Moderate", "Good", "Always"] },
+                      { q: 5, label: "Satisfactory Intercourse", options: ["Absent", "Difficult", "Moderate", "Good", "Always"] }
+                    ].map(({ q, label, options }) => (
+                      <div key={q}>
+                        <div style={{ fontSize: "9px", color: C.textSec, marginBottom: "2px" }}>{label}</div>
+                        <select
+                          value={ses.shim?.[`q${q}`] || ""}
+                          onChange={e => setSes(s => ({ ...s, shim: { ...(s.shim || {}), [`q${q}`]: parseInt(e.target.value) } }))}
+                          style={{ ...inp, appearance: "auto" }}
+                        >
+                          <option value="">—</option>
+                          {options.map((opt, i) => <option key={i} value={i + 1}>{i + 1}: {opt}</option>)}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                  {(() => {
+                    const total = ses.shim ? [1, 2, 3, 4, 5].reduce((s, i) => s + (ses.shim[`q${i}`] || 0), 0) : null;
+                    const interpretation = total !== null ? (total >= 22 ? "No ED" : total >= 17 ? "Mild ED" : total >= 12 ? "Mild-Moderate ED" : total >= 8 ? "Moderate ED" : "Severe ED") : null;
+                    const intColor = total !== null ? (total >= 22 ? C.success : total >= 17 ? C.warn : C.danger) : C.textMut;
+                    return total !== null ? (
+                      <div style={{ background: intColor + "15", border: `1px solid ${intColor}40`, borderRadius: "3px", padding: "5px 6px", fontSize: "9px", color: intColor, fontWeight: 700 }}>
+                        SHIM Score: {total} ({interpretation})
+                      </div>
+                    ) : null;
+                  })()}
+                </div>
+
+                {/* Life Expectancy Tool */}
+                <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: "5px", padding: "10px" }}>
+                  <div style={{ ...lbl, fontSize: "9px", marginBottom: "6px", fontWeight: 700 }}>Life Expectancy Context</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", marginBottom: "6px" }}>
+                    <div>
+                      <div style={lbl}>Age (years)</div>
+                      <input
+                        type="number"
+                        value={ses.lifeExpectancy?.age || ""}
+                        onChange={e => setSes(s => ({ ...s, lifeExpectancy: { ...(s.lifeExpectancy || {}), age: parseInt(e.target.value) } }))}
+                        style={inp}
+                        placeholder="Auto-calc from DOB"
+                      />
+                    </div>
+                    <div>
+                      <div style={lbl}>Charlson Index</div>
+                      <select
+                        value={ses.lifeExpectancy?.cci || ""}
+                        onChange={e => setSes(s => ({ ...s, lifeExpectancy: { ...(s.lifeExpectancy || {}), cci: parseInt(e.target.value) } }))}
+                        style={{ ...inp, appearance: "auto" }}
+                      >
+                        <option value="">—</option>
+                        {[0, 1, 2, 3, 4, 5].map(i => <option key={i}>{i}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  {(() => {
+                    const LETable = {
+                      50: { 0: 32, 2: 26, 4: 18 },
+                      55: { 0: 28, 2: 22, 4: 15 },
+                      60: { 0: 23, 2: 18, 4: 12 },
+                      65: { 0: 19, 2: 15, 4: 10 },
+                      70: { 0: 15, 2: 11, 4: 7 },
+                      75: { 0: 12, 2: 8, 4: 5 },
+                      80: { 0: 8, 2: 6, 4: 3 },
+                      85: { 0: 6, 2: 4, 4: 2 }
+                    };
+                    const age = ses.lifeExpectancy?.age;
+                    const cci = ses.lifeExpectancy?.cci || 0;
+                    if (!age) return null;
+                    const ageKey = Math.min(85, Math.max(50, Math.round(age / 5) * 5));
+                    const le = LETable[ageKey]?.[Math.min(4, cci)] || LETable[85][4];
+                    const interpretation = le > 10 ? "green" : le >= 5 ? "yellow" : "red";
+                    const label = interpretation === "green" ? "Treatment likely beneficial" : interpretation === "yellow" ? "Individualized decision" : "Active surveillance preferred";
+                    const color = interpretation === "green" ? C.success : interpretation === "yellow" ? C.warn : C.danger;
+                    return (
+                      <div style={{ background: color + "15", border: `1px solid ${color}40`, borderRadius: "3px", padding: "6px", fontSize: "9px", color: color, fontWeight: 700 }}>
+                        Est. Life Expectancy: ~{le} years
+                        <div style={{ fontSize: "8px", marginTop: "3px", fontWeight: 400, color: C.textSec }}>10-year rule: {label}</div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
+
+            {/* ── POST-TREATMENT MONITORING ── */}
+            {panel === "post-tx" && (
+              <div>
+                <div style={{ fontSize: "11px", fontWeight: 600, marginBottom: "10px" }}>Post-Treatment Monitoring</div>
+
+                {!ses.treatment?.modality ? (
+                  <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: "4px", padding: "10px", color: C.textSec, fontSize: "9px", textAlign: "center" }}>
+                    Select treatment modality to see monitoring milestones.
+                  </div>
+                ) : (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "8px" }}>
+                    {/* Radical Prostatectomy */}
+                    {ses.treatment.modality === "Radical Prostatectomy" && (
+                      <div style={{ background: C.bgInput, border: `1px solid ${C.border}`, borderRadius: "4px", padding: "8px" }}>
+                        <div style={{ ...lbl, marginBottom: "4px" }}>Post-Prostatectomy Milestones</div>
+                        <div style={{ fontSize: "9px", color: C.textSec, lineHeight: "1.4", marginBottom: "6px" }}>
+                          <div>• PSA undetectable (&lt;0.1) by 6 weeks</div>
+                          <div>• Biochemical recurrence: PSA ≥0.2 on repeat</div>
+                          <div>• Schedule: 6 weeks, then q3-6mo × 2y, then q6-12mo × 5y, then annually</div>
+                        </div>
+                        <div><div style={lbl}>PSA Values Log</div><textarea value={ses.postTxMonitoring?.psaLog || ""} onChange={e => setSes(s => ({ ...s, postTxMonitoring: { ...(s.postTxMonitoring || {}), psaLog: e.target.value } }))} rows={2} style={{ ...inp, resize: "vertical", fontSize: "8px" }} placeholder="e.g., 6w: 0.05, 3mo: 0.08..." /></div>
+                      </div>
+                    )}
+
+                    {/* Radiation Therapy */}
+                    {["HIFU", "Cryotherapy", "Laser (FLA)", "IRE/NanoKnife", "Focal Brachy"].includes(ses.treatment.modality) && (
+                      <div style={{ background: C.bgInput, border: `1px solid ${C.border}`, borderRadius: "4px", padding: "8px" }}>
+                        <div style={{ ...lbl, marginBottom: "4px" }}>Post-Radiation/Focal Milestones</div>
+                        <div style={{ fontSize: "9px", color: C.textSec, lineHeight: "1.4", marginBottom: "6px" }}>
+                          <div>• PSA nadir typically 18-36 months post-treatment</div>
+                          <div>• Phoenix definition: nadir + 2.0 ng/mL</div>
+                          <div>• PSA bounce common in first 2 years</div>
+                          <div>• Follow-up MRI at 6 months (focal)</div>
+                          <div>• Surveillance biopsy at 12 months (focal)</div>
+                        </div>
+                        <div><div style={lbl}>PSA Tracking</div><textarea value={ses.postTxMonitoring?.psaLog || ""} onChange={e => setSes(s => ({ ...s, postTxMonitoring: { ...(s.postTxMonitoring || {}), psaLog: e.target.value } }))} rows={2} style={{ ...inp, resize: "vertical", fontSize: "8px" }} placeholder="e.g., 3mo: 8.2, 6mo: 7.9, 12mo: 6.5..." /></div>
+                      </div>
+                    )}
+
+                    {/* Additional notes */}
+                    <div>
+                      <div style={lbl}>Monitoring Notes</div>
+                      <textarea
+                        value={ses.postTxMonitoring?.notes || ""}
+                        onChange={e => setSes(s => ({ ...s, postTxMonitoring: { ...(s.postTxMonitoring || {}), notes: e.target.value } }))}
+                        rows={2}
+                        style={{ ...inp, resize: "vertical" }}
+                        placeholder="Recurrence events, imaging findings, treatment complications..."
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
