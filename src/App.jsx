@@ -125,6 +125,21 @@ function Tabs({ tabs, active, onSelect, small }) {
   );
 }
 
+function Tip({ label, children }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div style={{ display: "inline-block", position: "relative" }}>
+      <div onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "14px", height: "14px", borderRadius: "50%", background: C.border, color: C.textMut, fontSize: "8px", fontWeight: 700, cursor: "help" }}>?</div>
+      {show && (
+        <div style={{ position: "absolute", bottom: "calc(100% + 4px)", left: "50%", transform: "translateX(-50%)", background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: "3px", padding: "5px 7px", fontSize: "8px", color: C.textSec, maxWidth: "180px", zIndex: 999, whiteSpace: "normal", boxShadow: "0 2px 8px rgba(0,0,0,0.3)" }}>
+          {children}
+          <div style={{ position: "absolute", top: "100%", left: "50%", transform: "translateX(-50%)", width: 0, height: 0, borderLeft: "4px solid transparent", borderRight: "4px solid transparent", borderTop: `4px solid ${C.bgCard}` }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function GradeSel({ value, onChange, compact }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: compact ? "1fr 1fr 1fr" : "1fr 1fr", gap: "3px" }}>
@@ -146,16 +161,27 @@ function Stat({ label, children }) {
   return <div style={{ background: C.bgInput, borderRadius: "4px", padding: "5px", textAlign: "center" }}><div style={{ ...lbl, fontSize: "7px", marginBottom: "1px" }}>{label}</div><div style={{ fontSize: "12px", fontFamily: FONT, fontWeight: 700, color: C.textPri }}>{children}</div></div>;
 }
 
+function useWindowSize() {
+  const [size, setSize] = useState({ width: typeof window !== "undefined" ? window.innerWidth : 1024, height: typeof window !== "undefined" ? window.innerHeight : 768 });
+  useEffect(() => {
+    const handleResize = () => setSize({ width: window.innerWidth, height: window.innerHeight });
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+  return size;
+}
+
 /* ══════════════════════════════════════════════════════════════════
    PROSTATE MAP
    ══════════════════════════════════════════════════════════════════ */
 
-function ProstateMap({ session, selectedZone, onSelectZone, selectedLesion, onSelectLesion, onLesionDragStart, svgRef, showFocalOverlay }) {
+function ProstateMap({ session, selectedZone, onSelectZone, selectedLesion, onSelectLesion, onLesionDragStart, svgRef, showFocalOverlay, isSmallScreen }) {
   const hasMri = session.mriLesions.length > 0;
   const fp = session.focalPlan;
   const tx = session.treatment;
+  const maxWidth = isSmallScreen ? "100%" : "390px";
   return (
-    <svg ref={svgRef} viewBox="0 0 420 310" width="100%" style={{ maxWidth: "390px", userSelect: "none" }}>
+    <svg ref={svgRef} viewBox="0 0 420 310" width="100%" style={{ maxWidth: maxWidth, userSelect: "none" }}>
       {/* Focal zone overlay */}
       {showFocalOverlay && fp && FOCAL_PATHS[fp.pattern] && (
         <path d={FOCAL_PATHS[fp.pattern]} fill={C.focalZone + "18"} stroke={C.focalZone} strokeWidth="1.5" strokeDasharray="6,3" />
@@ -769,6 +795,151 @@ function focalOk(session, patient) {
 }
 
 /* ══════════════════════════════════════════════════════════════════
+   WELCOME OVERLAY
+   ══════════════════════════════════════════════════════════════════ */
+
+function WelcomeOverlay({ onNewDiagnostic, onNewSurveillance, onImport, onSkip }) {
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9998 }}>
+      <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: "8px", padding: "30px", maxWidth: "480px", textAlign: "center" }}>
+        <div style={{ fontSize: "24px", fontWeight: 700, color: C.textPri, marginBottom: "8px" }}>Prostate Biopsy Mapper</div>
+        <div style={{ fontSize: "12px", color: C.textSec, marginBottom: "24px", lineHeight: "1.5" }}>Advanced mapping, risk stratification, and focal therapy planning for prostate cancer diagnosis and surveillance.</div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "12px", marginBottom: "16px" }}>
+          <button onClick={onNewDiagnostic} style={{ ...btn, background: C.accentDim, color: C.accent, border: `1px solid ${C.accent}40`, padding: "14px 16px", fontSize: "11px", fontWeight: 600, borderRadius: "6px", textAlign: "left", display: "flex", flexDirection: "column", cursor: "pointer" }}>
+            <span style={{ fontSize: "12px", fontWeight: 700, marginBottom: "4px" }}>New Diagnostic Biopsy</span>
+            <span style={{ fontSize: "9px", color: C.textSec, fontWeight: 400 }}>Enter systematic 12-zone mapping data</span>
+          </button>
+
+          <button onClick={onNewSurveillance} style={{ ...btn, background: C.warnDim, color: C.warn, border: `1px solid ${C.warn}40`, padding: "14px 16px", fontSize: "11px", fontWeight: 600, borderRadius: "6px", textAlign: "left", display: "flex", flexDirection: "column", cursor: "pointer" }}>
+            <span style={{ fontSize: "12px", fontWeight: 700, marginBottom: "4px" }}>New Surveillance Biopsy</span>
+            <span style={{ fontSize: "9px", color: C.textSec, fontWeight: 400 }}>Track repeat biopsies during active surveillance</span>
+          </button>
+
+          <button onClick={onImport} style={{ ...btn, background: C.bgInput, color: C.textSec, border: `1px solid ${C.border}`, padding: "14px 16px", fontSize: "11px", fontWeight: 600, borderRadius: "6px", textAlign: "left", display: "flex", flexDirection: "column", cursor: "pointer" }}>
+            <span style={{ fontSize: "12px", fontWeight: 700, marginBottom: "4px" }}>Import Existing Data</span>
+            <span style={{ fontSize: "9px", color: C.textMut, fontWeight: 400 }}>Load a previously exported JSON file</span>
+          </button>
+        </div>
+
+        <button onClick={onSkip} style={{ background: "none", border: "none", color: C.textMut, cursor: "pointer", fontSize: "10px", textDecoration: "underline" }}>Skip</button>
+      </div>
+    </div>
+  );
+}
+
+function SummaryDashboard({ patient, session }) {
+  const specs = allSpecs(session);
+  const nccn = computeNCCN(session.psa, patient.tStage, patient.volume, specs);
+  const mg = maxG(specs);
+  const pos = sumCores(specs, "coresPos");
+  const tot = sumCores(specs, "coresTotal");
+  const maxI = Math.max(0, ...specs.map(s => parseInt(s.maxPct) || 0));
+
+  // Calculate age
+  let ageStr = "—";
+  if (patient.dob) {
+    const today = new Date();
+    const birth = new Date(patient.dob);
+    let age = today.getFullYear() - birth.getFullYear();
+    const m = today.getMonth() - birth.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+    ageStr = age.toString();
+  }
+
+  // AS Eligibility
+  const asEligible = nccn.group !== null && (nccn.group === 0 || nccn.group === 1) && mg && ["benign", "3+3"].includes(mg.value) && !specs.some(s => s.pni || s.crib || s.idc);
+
+  // Focal therapy eligibility
+  const rightS = Object.entries(session.specimens).filter(([z, s]) => z.startsWith("R ") && s.gleason && s.gleason !== "benign").length > 0;
+  const leftS = Object.entries(session.specimens).filter(([z, s]) => z.startsWith("L ") && s.gleason && s.gleason !== "benign").length > 0;
+  const bilat = rightS && leftS;
+  const focalEligible = !bilat && mg && ["benign", "3+3", "3+4"].includes(mg.value) && !specs.some(s => s.pni || s.crib || s.idc) && maxI <= 50;
+
+  const psaData = [session].filter(s => s.psa && s.date).map(s => ({ date: s.date, psa: parseFloat(s.psa) }));
+
+  return (
+    <div style={{ padding: "14px", maxWidth: "900px", margin: "0 auto", overflowY: "auto" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "12px", marginBottom: "16px" }}>
+        {/* Patient Info */}
+        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: "6px", padding: "12px" }}>
+          <div style={{ ...lbl, marginBottom: "8px" }}>Patient</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            <div><span style={{ fontSize: "9px", color: C.textMut }}>MRN</span><div style={{ fontSize: "12px", fontWeight: 700, color: C.textPri }}>{patient.mrn || "—"}</div></div>
+            <div><span style={{ fontSize: "9px", color: C.textMut }}>DOB</span><div style={{ fontSize: "12px", fontWeight: 700, color: C.textPri }}>{patient.dob ? new Date(patient.dob).toLocaleDateString() : "—"} (Age: {ageStr})</div></div>
+          </div>
+        </div>
+
+        {/* NCCN Risk Group */}
+        {nccn.group !== null && (
+          <div style={{ background: `${NCCN_GROUPS[nccn.group].color}15`, border: `1px solid ${NCCN_GROUPS[nccn.group].color}40`, borderRadius: "6px", padding: "12px" }}>
+            <div style={{ ...lbl, marginBottom: "8px" }}>NCCN Risk</div>
+            <div style={{ fontSize: "16px", fontWeight: 700, color: NCCN_GROUPS[nccn.group].color }}>{NCCN_GROUPS[nccn.group].name}</div>
+            {nccn.density !== null && <div style={{ fontSize: "9px", color: C.textSec, marginTop: "6px" }}>PSA Density: {nccn.density.toFixed(3)}</div>}
+          </div>
+        )}
+
+        {/* Biopsy Metrics */}
+        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: "6px", padding: "12px" }}>
+          <div style={{ ...lbl, marginBottom: "8px" }}>Biopsy Metrics</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "10px" }}>
+            <div><span style={{ color: C.textMut }}>Max Grade:</span> <span style={{ fontWeight: 600, color: mg?.color }}>{mg?.label || "—"}</span></div>
+            <div><span style={{ color: C.textMut }}>Positive Cores:</span> <span style={{ fontWeight: 600 }}>{tot > 0 ? `${pos}/${tot}` : "—"}</span></div>
+            <div><span style={{ color: C.textMut }}>Max Involvement:</span> <span style={{ fontWeight: 600 }}>{maxI > 0 ? `${maxI}%` : "—"}</span></div>
+          </div>
+        </div>
+
+        {/* Baseline Scores */}
+        {(session.ipss || session.shim) && (
+          <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: "6px", padding: "12px" }}>
+            <div style={{ ...lbl, marginBottom: "8px" }}>Baseline Scores</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "10px" }}>
+              {session.ipss && (() => {
+                const total = [1, 2, 3, 4, 5, 6, 7].reduce((s, i) => s + (session.ipss[`q${i}`] || 0), 0);
+                return <div><span style={{ color: C.textMut }}>IPSS:</span> <span style={{ fontWeight: 600 }}>{total}</span></div>;
+              })()}
+              {session.shim && (() => {
+                const total = [1, 2, 3, 4, 5].reduce((s, i) => s + (session.shim[`q${i}`] || 0), 0);
+                return <div><span style={{ color: C.textMut }}>SHIM:</span> <span style={{ fontWeight: 600 }}>{total}</span></div>;
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* Treatment Status */}
+        <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: "6px", padding: "12px" }}>
+          <div style={{ ...lbl, marginBottom: "8px" }}>Treatment Status</div>
+          <div style={{ fontSize: "10px", color: session.treatment?.modality ? C.textPri : C.textMut }}>
+            {session.treatment?.modality ? `${session.treatment.modality} - ${session.treatment.date || "pending"}` : "No treatment recorded"}
+          </div>
+        </div>
+
+        {/* Active Surveillance */}
+        <div style={{ background: asEligible ? C.successDim : C.dangerDim, border: `1px solid ${asEligible ? C.success : C.danger}40`, borderRadius: "6px", padding: "12px" }}>
+          <div style={{ ...lbl, marginBottom: "8px" }}>AS Eligibility</div>
+          <div style={{ fontSize: "11px", fontWeight: 600, color: asEligible ? C.success : C.danger }}>{asEligible ? "Eligible" : "Not Eligible"}</div>
+          <div style={{ fontSize: "8px", color: C.textSec, marginTop: "4px" }}>{asEligible ? "Low/VL risk, no adverse features" : "Review risk factors"}</div>
+        </div>
+
+        {/* Focal Therapy */}
+        <div style={{ background: focalEligible ? C.successDim : C.dangerDim, border: `1px solid ${focalEligible ? C.success : C.danger}40`, borderRadius: "6px", padding: "12px" }}>
+          <div style={{ ...lbl, marginBottom: "8px" }}>Focal Therapy</div>
+          <div style={{ fontSize: "11px", fontWeight: 600, color: focalEligible ? C.success : C.danger }}>{focalEligible ? "Candidate" : "Review"}</div>
+          <div style={{ fontSize: "8px", color: C.textSec, marginTop: "4px" }}>{focalEligible ? "Unilateral, low-grade disease" : "Bilateral or high-grade cancer"}</div>
+        </div>
+      </div>
+
+      {/* Quick Actions */}
+      <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>
+        <button style={{ ...btn, background: C.accentDim, color: C.accent, border: `1px solid ${C.accent}30`, padding: "8px 14px" }}>Enter Biopsy Data</button>
+        <button style={{ ...btn, background: C.bgInput, color: C.textSec, border: `1px solid ${C.border}`, padding: "8px 14px" }}>View Education</button>
+        <button style={{ ...btn, background: C.successDim, color: C.success, border: `1px solid ${C.success}30`, padding: "8px 14px" }}>Print Report</button>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════
    MAIN APPLICATION
    ══════════════════════════════════════════════════════════════════ */
 
@@ -784,10 +955,26 @@ export default function App() {
   const [showPrint, setShowPrint] = useState(false);
   const [dragging, setDragging] = useState(null);
   const [showPatientList, setShowPatientList] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(true);
+  const [editingSessionIdx, setEditingSessionIdx] = useState(null);
+  const [editingSessionLabel, setEditingSessionLabel] = useState("");
+  const windowSize = useWindowSize();
   const svgRef = useRef(null);
+  const importRef = useRef(null);
 
   const pat = patients[activePatient];
   const ses = pat.sessions[activeSession] || pat.sessions[0];
+
+  // Check if patient has any data
+  const hasData = pat.mrn || Object.values(ses.specimens).some(s => s.gleason !== null) || ses.targetedBx.length > 0 || ses.psa || ses.date;
+  const shouldShowWelcome = showWelcome && !hasData;
+
+  // Auto-hide welcome when data is entered
+  useEffect(() => {
+    if (hasData && showWelcome) {
+      setShowWelcome(false);
+    }
+  }, [hasData, showWelcome]);
 
   const setPat = useCallback((fn) => setPatients(p => p.map((x, i) => i === activePatient ? (typeof fn === "function" ? fn(x) : { ...x, ...fn }) : x)), [activePatient]);
   const setSes = useCallback((fn) => setPat(p => ({ ...p, sessions: p.sessions.map((s, i) => i === activeSession ? (typeof fn === "function" ? fn(s) : { ...s, ...fn }) : s) })), [activeSession, setPat]);
@@ -823,7 +1010,6 @@ export default function App() {
   };
 
   // JSON import
-  const importRef = useRef(null);
   const handleImport = (e) => {
     const file = e.target.files?.[0]; if (!file) return;
     const reader = new FileReader();
@@ -833,6 +1019,7 @@ export default function App() {
         if (data.patient) {
           setPatients(p => [...p, data.patient]);
           setActivePatient(patients.length);
+          setShowWelcome(false);
         }
       } catch (err) { console.error("Import failed", err); }
     };
@@ -842,11 +1029,31 @@ export default function App() {
   const filledCount = Object.values(ses.specimens).filter(s => s.gleason !== null).length;
   const tgtCount = ses.targetedBx.filter(t => t.gleason !== null).length;
 
+  const handleWelcomeNewDiagnostic = () => {
+    setSes({ type: "diagnostic" });
+    setPanel("systematic");
+    setShowWelcome(false);
+  };
+
+  const handleWelcomeNewSurveillance = () => {
+    setSes({ type: "surveillance" });
+    setPanel("systematic");
+    setShowWelcome(false);
+  };
+
+  const handleWelcomeImport = () => {
+    importRef.current?.click();
+  };
+
   if (showPrint) return <PrintReport patient={pat} session={ses} onClose={() => setShowPrint(false)} />;
+
+  const isSmallScreen = windowSize.width < 900;
+  const isMobileScreen = windowSize.width < 600;
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.textPri, fontFamily: FONT, fontSize: "11px" }}>
       <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+      {shouldShowWelcome && <WelcomeOverlay onNewDiagnostic={handleWelcomeNewDiagnostic} onNewSurveillance={handleWelcomeNewSurveillance} onImport={handleWelcomeImport} onSkip={() => setShowWelcome(false)} />}
       <input type="file" ref={imgInputRef} accept="image/*" style={{ display: "none" }} onChange={handleImageUpload} />
       <input type="file" ref={importRef} accept=".json" style={{ display: "none" }} onChange={handleImport} />
 
@@ -859,8 +1066,8 @@ export default function App() {
             <div style={{ fontSize: "7px", color: C.textMut, letterSpacing: "0.8px", textTransform: "uppercase" }}>Focal Therapy Planning · NCCN · Genomics · Registry</div>
           </div>
         </div>
-        <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
-          <Tabs tabs={[{ key: "map", label: "Map" }, { key: "kinetics", label: "PSA" }, { key: "compare", label: "Compare" }, { key: "edu", label: "Edu" }, { key: "guide", label: "Guide" }]} active={mainView} onSelect={setMainView} small />
+        <div style={{ display: "flex", gap: "4px", alignItems: "center", flexWrap: "wrap" }}>
+          <Tabs tabs={[{ key: "map", label: "Map" }, { key: "summary", label: "Summary" }, { key: "kinetics", label: "PSA" }, { key: "compare", label: "Compare" }, { key: "edu", label: "Edu" }, { key: "guide", label: "Guide" }]} active={mainView} onSelect={setMainView} small />
           <button onClick={() => setShowPrint(true)} style={{ ...btn, background: "#1A2E1A", color: C.success, border: `1px solid ${C.success}30`, padding: "3px 8px" }}>Print</button>
           <button onClick={exportJSON} style={{ ...btn, background: C.accentDim, color: C.accent, border: `1px solid ${C.accent}30`, padding: "3px 8px" }}>JSON↓</button>
           <button onClick={() => importRef.current?.click()} style={{ ...btn, background: C.bgInput, color: C.textSec, border: `1px solid ${C.border}`, padding: "3px 8px" }}>Import</button>
@@ -900,10 +1107,10 @@ export default function App() {
       <div style={{ borderBottom: `1px solid ${C.border}`, padding: "4px 12px", display: "flex", gap: "8px", alignItems: "center", background: C.bgCard, flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "3px" }}><span style={lbl}>MRN</span><input value={pat.mrn} onChange={e => setPat({ mrn: e.target.value })} style={{ ...inp, width: "75px" }} /></div>
         <div style={{ display: "flex", alignItems: "center", gap: "3px" }}><span style={lbl}>DOB</span><input type="date" value={pat.dob} onChange={e => setPat({ dob: e.target.value })} style={{ ...inp, width: "110px" }} /></div>
-        <div style={{ display: "flex", alignItems: "center", gap: "3px" }}><span style={lbl}>cT</span><select value={pat.tStage} onChange={e => setPat({ tStage: e.target.value })} style={{ ...inp, width: "68px", appearance: "auto" }}>{T_STAGES.map(t => <option key={t}>{t}</option>)}</select></div>
-        <div style={{ display: "flex", alignItems: "center", gap: "3px" }}><span style={lbl}>Vol</span><input value={pat.volume} onChange={e => setPat({ volume: e.target.value })} style={{ ...inp, width: "48px" }} placeholder="cc" /></div>
+        <div style={{ display: "flex", alignItems: "center", gap: "3px" }}><span style={{ ...lbl, display: "flex", alignItems: "center", gap: "2px" }}>cT <Tip>Clinical T-stage: cT1c = not palpable (found on biopsy), cT2 = palpable/confined, cT3+ = extraprostatic extension.</Tip></span><select value={pat.tStage} onChange={e => setPat({ tStage: e.target.value })} style={{ ...inp, width: "68px", appearance: "auto" }}>{T_STAGES.map(t => <option key={t}>{t}</option>)}</select></div>
+        <div style={{ display: "flex", alignItems: "center", gap: "3px" }}><span style={{ ...lbl, display: "flex", alignItems: "center", gap: "2px" }}>Vol <Tip>Prostate volume in cubic centimeters (measured by MRI or ultrasound). Used to calculate PSA density.</Tip></span><input value={pat.volume} onChange={e => setPat({ volume: e.target.value })} style={{ ...inp, width: "48px" }} placeholder="cc" /></div>
         <div style={{ width: "1px", height: "16px", background: C.border }} />
-        <div style={{ display: "flex", alignItems: "center", gap: "3px" }}><span style={lbl}>PSA</span><input value={ses.psa} onChange={e => setSes({ psa: e.target.value })} style={{ ...inp, width: "55px" }} placeholder="ng/mL" /></div>
+        <div style={{ display: "flex", alignItems: "center", gap: "3px" }}><span style={{ ...lbl, display: "flex", alignItems: "center", gap: "2px" }}>PSA <Tip>Prostate-Specific Antigen. Normal less than 4.0 ng/mL. Higher values may indicate cancer, BPH, or infection. Velocity and density matter.</Tip></span><input value={ses.psa} onChange={e => setSes({ psa: e.target.value })} style={{ ...inp, width: "55px" }} placeholder="ng/mL" /></div>
         <div style={{ display: "flex", alignItems: "center", gap: "3px" }}><span style={lbl}>Date</span><input type="date" value={ses.date} onChange={e => setSes({ date: e.target.value })} style={{ ...inp, width: "110px" }} /></div>
         <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
           <span style={lbl}>Type</span>
@@ -916,9 +1123,24 @@ export default function App() {
         <div style={{ width: "1px", height: "16px", background: C.border }} />
         <div style={{ display: "flex", gap: "3px", alignItems: "center", flexWrap: "wrap" }}>
           {pat.sessions.map((s, i) => (
-            <div key={s.id} style={{ display: "flex", alignItems: "center" }}>
-              <button onClick={() => { setActiveSession(i); setSelZone(null); }} style={{ ...btn, padding: "2px 7px", fontSize: "8px", background: i === activeSession ? C.accentDim : "transparent", color: i === activeSession ? C.accent : C.textMut, border: `1px solid ${i === activeSession ? C.accent + "30" : "transparent"}` }}>{s.label || `S${i + 1}`}</button>
-              {pat.sessions.length > 1 && <button onClick={() => { setPat(p => ({ ...p, sessions: p.sessions.filter((_, j) => j !== i) })); if (activeSession >= i && activeSession > 0) setActiveSession(activeSession - 1); }} style={{ background: "none", border: "none", color: C.textMut, cursor: "pointer", fontSize: "8px" }}>×</button>}
+            <div key={s.id} style={{ display: "flex", alignItems: "center", position: "relative" }}>
+              {editingSessionIdx === i ? (
+                <input
+                  autoFocus
+                  type="text"
+                  value={editingSessionLabel}
+                  onChange={e => setEditingSessionLabel(e.target.value)}
+                  onBlur={() => { setPat(p => ({ ...p, sessions: p.sessions.map((x, j) => j === i ? { ...x, label: editingSessionLabel } : x) })); setEditingSessionIdx(null); }}
+                  onKeyDown={e => { if (e.key === "Enter") { setPat(p => ({ ...p, sessions: p.sessions.map((x, j) => j === i ? { ...x, label: editingSessionLabel } : x) })); setEditingSessionIdx(null); } if (e.key === "Escape") setEditingSessionIdx(null); }}
+                  style={{ ...inp, width: "70px", padding: "1px 4px", fontSize: "8px" }}
+                />
+              ) : (
+                <button onClick={() => { setActiveSession(i); setSelZone(null); }} onDoubleClick={() => { setEditingSessionIdx(i); setEditingSessionLabel(s.label || `S${i + 1}`); }} style={{ ...btn, padding: "2px 7px", fontSize: "8px", background: i === activeSession ? C.accentDim : "transparent", color: i === activeSession ? C.accent : C.textMut, border: `1px solid ${i === activeSession ? C.accent + "30" : "transparent"}`, position: "relative" }}>
+                  {s.label || `S${i + 1}`}
+                  <span style={{ position: "absolute", top: "-8px", right: "-6px", width: "10px", height: "10px", fontSize: "7px", opacity: 0.3, cursor: "pointer" }} title="Double-click to edit">✎</span>
+                </button>
+              )}
+              {pat.sessions.length > 1 && <button onClick={() => { setPat(p => ({ ...p, sessions: p.sessions.filter((_, j) => j !== i) })); if (activeSession >= i && activeSession > 0) setActiveSession(activeSession - 1); }} style={{ background: "none", border: "none", color: C.textMut, cursor: "pointer", fontSize: "8px", marginLeft: "2px" }}>×</button>}
             </div>
           ))}
           <button onClick={() => { setPat(p => ({ ...p, sessions: [...p.sessions, mkSession(`Session ${p.sessions.length + 1}`)] })); setActiveSession(pat.sessions.length); }} style={{ ...btn, background: "transparent", color: C.textMut, border: `1px dashed ${C.border}`, padding: "2px 5px", fontSize: "7px" }}>+</button>
@@ -927,7 +1149,9 @@ export default function App() {
       </div>
 
       {/* ═══ MAIN CONTENT ═══ */}
-      {mainView === "kinetics" ? (
+      {mainView === "summary" ? (
+        <SummaryDashboard patient={pat} session={ses} />
+      ) : mainView === "kinetics" ? (
         <div style={{ padding: "14px", maxWidth: "800px", margin: "0 auto" }}><PSAKinetics sessions={pat.sessions} /></div>
       ) : mainView === "compare" ? (
         <SessionCompare sessions={pat.sessions} />
@@ -936,10 +1160,10 @@ export default function App() {
       ) : mainView === "guide" ? (
         <ActiveSurveillanceGuide sessions={pat.sessions} />
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "410px 1fr", minHeight: "calc(100vh - 80px)" }}>
+        <div style={{ display: "grid", gridTemplateColumns: isSmallScreen ? "1fr" : "410px 1fr", minHeight: "calc(100vh - 80px)" }}>
           {/* LEFT */}
           <div style={{ borderRight: `1px solid ${C.border}`, padding: "10px", display: "flex", flexDirection: "column", alignItems: "center", overflowY: "auto", gap: "6px" }}>
-            <ProstateMap session={ses} selectedZone={selZone} onSelectZone={z => { setSelZone(z); setPanel("systematic"); setSelLesion(null); setSelTarget(null); }} selectedLesion={selLesion} onSelectLesion={id => { setSelLesion(id); setPanel("mri"); setSelZone(null); }} onLesionDragStart={onDragStart} svgRef={svgRef} showFocalOverlay={panel === "focal" || panel === "treatment"} />
+            <ProstateMap session={ses} selectedZone={selZone} onSelectZone={z => { setSelZone(z); setPanel("systematic"); setSelLesion(null); setSelTarget(null); }} selectedLesion={selLesion} onSelectLesion={id => { setSelLesion(id); setPanel("mri"); setSelZone(null); }} onLesionDragStart={onDragStart} svgRef={svgRef} showFocalOverlay={panel === "focal" || panel === "treatment"} isSmallScreen={isSmallScreen} />
 
             {/* MRI image thumbnail */}
             {ses.mriImageData && <div style={{ width: "100%", maxWidth: "380px" }}><img src={ses.mriImageData} alt="MRI" style={{ width: "100%", borderRadius: "4px", border: `1px solid ${C.border}`, maxHeight: "120px", objectFit: "cover" }} /></div>}
@@ -970,23 +1194,92 @@ export default function App() {
             </div>
 
             {/* ── SYSTEMATIC ── */}
-            {panel === "systematic" && (selZone && ses.specimens[selZone] ? (() => { const sp = ses.specimens[selZone]; return (
+            {panel === "systematic" && (
+              <div>
+                {!selZone && (
+                  <>
+                    <div style={{ marginBottom: "12px" }}>
+                      <div style={{ ...lbl, marginBottom: "6px" }}>Quick Templates</div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px" }}>
+                        <button onClick={() => { setSes(s => ({ ...s, specimens: Object.fromEntries(ZONES.map(z => [z, { ...mkSpec(), gleason: "benign", coresPos: "0", coresTotal: "2", maxPct: "0" }])) })); }} style={{ ...btn, background: C.successDim, color: C.success, border: `1px solid ${C.success}30`, padding: "6px 8px", fontSize: "8px" }}>All Benign</button>
+                        <button onClick={() => { setSes(s => ({ ...s, specimens: Object.fromEntries(ZONES.map(z => [z, mkSpec()])) })); }} style={{ ...btn, background: C.dangerDim, color: C.danger, border: `1px solid ${C.danger}30`, padding: "6px 8px", fontSize: "8px" }}>Clear All</button>
+                        <button onClick={() => { const specs = Object.fromEntries(ZONES.map(z => [z, { ...mkSpec(), gleason: "benign", coresPos: "0", coresTotal: "2", maxPct: "0" }])); specs["R Mid Lat"] = { gleason: "3+4", coresPos: "1", coresTotal: "2", maxPct: "40", pni: false, crib: false, idc: false, notes: "" }; specs["R Mid Med"] = { gleason: "3+4", coresPos: "1", coresTotal: "2", maxPct: "40", pni: false, crib: false, idc: false, notes: "" }; setSes(s => ({ ...s, specimens: specs })); }} style={{ ...btn, background: C.warnDim, color: C.warn, border: `1px solid ${C.warn}30`, padding: "6px 8px", fontSize: "8px" }}>R Mid 3+4</button>
+                        <button onClick={() => { const specs = Object.fromEntries(ZONES.map(z => [z, { ...mkSpec(), gleason: "benign", coresPos: "0", coresTotal: "2", maxPct: "0" }])); specs["R Mid Med"] = { gleason: "3+3", coresPos: "1", coresTotal: "2", maxPct: "10", pni: false, crib: false, idc: false, notes: "" }; specs["L Mid Med"] = { gleason: "3+3", coresPos: "1", coresTotal: "2", maxPct: "10", pni: false, crib: false, idc: false, notes: "" }; setSes(s => ({ ...s, specimens: specs })); }} style={{ ...btn, background: C.accentDim, color: C.accent, border: `1px solid ${C.accent}30`, padding: "6px 8px", fontSize: "8px" }}>Bilateral 3+3</button>
+                      </div>
+                    </div>
+
+                    <div style={{ marginBottom: "12px" }}>
+                      <div style={{ ...lbl, marginBottom: "6px" }}>Zone Progress</div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(12, 1fr)", gap: "2px", marginBottom: "6px" }}>
+                        {ZONES.map(z => {
+                          const s = ses.specimens[z];
+                          const g = GLEASON.find(x => x.value === s.gleason);
+                          const filled = s.gleason !== null;
+                          const selected = selZone === z;
+                          return (
+                            <div key={z} onClick={() => setSelZone(z)} style={{ width: "100%", aspectRatio: "1", borderRadius: "3px", background: filled ? g.color : C.border, border: selected ? `2px solid ${C.accent}` : "1px solid " + C.border, cursor: "pointer", opacity: filled ? 0.9 : 0.3 }} title={z} />
+                          );
+                        })}
+                      </div>
+                      <div style={{ fontSize: "9px", color: C.textSec, textAlign: "center" }}>{filledCount}/12 zones entered</div>
+                    </div>
+                  </>
+                )}
+
+                {selZone && ses.specimens[selZone] ? (() => { const sp = ses.specimens[selZone]; return (
               <div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
                   <div><div style={{ ...lbl }}>{ses.type === "surveillance" && ses.treatment?.pattern && isZoneInPattern(selZone, ses.treatment.pattern) ? "🔶 IN TREATMENT ZONE" : ""}</div><div style={{ fontSize: "14px", fontWeight: 700 }}>{selZone}</div></div>
                   <button onClick={() => setSes(s => ({ ...s, specimens: { ...s.specimens, [selZone]: mkSpec() } }))} style={{ ...btn, background: C.dangerDim, color: C.danger, border: `1px solid ${C.danger}25` }}>Clear</button>
                 </div>
-                <div style={{ marginBottom: "10px" }}><div style={lbl}>Grade Group</div><GradeSel value={sp.gleason} onChange={v => updSpec("gleason", v)} /></div>
+                <div style={{ marginBottom: "10px" }}><div style={{ ...lbl, display: "flex", alignItems: "center", gap: "4px" }}>Grade Group <Tip>Gleason score patterns indicating cancer aggressiveness. GG1 (3+3) is low-grade, GG2 (3+4) intermediate, GG3+ higher-grade.</Tip></div><GradeSel value={sp.gleason} onChange={v => updSpec("gleason", v)} /></div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px", marginBottom: "10px" }}>
                   <div><div style={lbl}>Cores +</div><input type="number" min="0" value={sp.coresPos} onChange={e => updSpec("coresPos", e.target.value)} style={inp} /></div>
                   <div><div style={lbl}>Total</div><input type="number" min="0" value={sp.coresTotal} onChange={e => updSpec("coresTotal", e.target.value)} style={inp} /></div>
                   <div><div style={lbl}>Max %</div><input type="number" min="0" max="100" value={sp.maxPct} onChange={e => updSpec("maxPct", e.target.value)} style={inp} /></div>
                 </div>
-                <div style={{ marginBottom: "10px" }}><div style={lbl}>Adverse</div><div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: "4px", padding: "4px 6px" }}><Chk label="PNI" checked={sp.pni} onChange={v => updSpec("pni", v)} /><Chk label="Cribriform" checked={sp.crib} onChange={v => updSpec("crib", v)} /><Chk label="IDC-P" checked={sp.idc} onChange={v => updSpec("idc", v)} /></div></div>
+                <div style={{ marginBottom: "10px" }}>
+                  <div style={{ ...lbl, display: "flex", alignItems: "center", gap: "4px" }}>
+                    Adverse Features
+                    <Tip>PNI = cancer around nerve fibers (higher risk). Cribriform = aggressive pattern. IDC-P = intraductal carcinoma (worse outcomes).</Tip>
+                  </div>
+                  <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: "4px", padding: "4px 6px" }}>
+                    <Chk label={<><span>PNI</span> <Tip>Perineural invasion - cancer cells tracking along nerves.</Tip></>} checked={sp.pni} onChange={v => updSpec("pni", v)} />
+                    <Chk label={<><span>Cribriform</span> <Tip>Cribriform growth pattern - associated with aggressive behavior.</Tip></>} checked={sp.crib} onChange={v => updSpec("crib", v)} />
+                    <Chk label={<><span>IDC-P</span> <Tip>Intraductal carcinoma of prostate - may warrant aggressive treatment.</Tip></>} checked={sp.idc} onChange={v => updSpec("idc", v)} />
+                  </div>
+                </div>
                 <div style={{ marginBottom: "10px" }}><div style={lbl}>Notes</div><textarea value={sp.notes} onChange={e => updSpec("notes", e.target.value)} rows={2} style={{ ...inp, resize: "vertical", minHeight: "38px" }} /></div>
-                <div><div style={lbl}>Navigate</div><div style={{ display: "flex", gap: "3px", flexWrap: "wrap" }}>{ZONES.filter(z => z !== selZone).map(z => { const g = GLEASON.find(x => x.value === ses.specimens[z].gleason); return <button key={z} onClick={() => setSelZone(z)} style={{ background: g ? g.bg : C.bg, border: `1px solid ${g ? g.color + "30" : C.border}`, borderRadius: "3px", color: g ? g.color : C.textMut, padding: "2px 4px", fontSize: "7px", cursor: "pointer", fontFamily: FONT }}>{z}</button>; })}</div></div>
+
+                {/* Next/Previous Zone Navigation */}
+                <div style={{ display: "flex", gap: "4px", marginBottom: "10px", justifyContent: "space-between" }}>
+                  <button
+                    onClick={() => {
+                      const currentIdx = ZONES.indexOf(selZone);
+                      if (currentIdx > 0) setSelZone(ZONES[currentIdx - 1]);
+                    }}
+                    style={{ ...btn, flex: 1, background: C.bgInput, color: C.textSec, border: `1px solid ${C.border}`, padding: "6px 8px", fontSize: "9px" }}
+                  >
+                    ← Previous Zone
+                  </button>
+                  <button
+                    onClick={() => {
+                      const currentIdx = ZONES.indexOf(selZone);
+                      const nextEmpty = ZONES.slice(currentIdx + 1).find(z => ses.specimens[z].gleason === null);
+                      if (nextEmpty) setSelZone(nextEmpty);
+                      else if (currentIdx < ZONES.length - 1) setSelZone(ZONES[currentIdx + 1]);
+                    }}
+                    style={{ ...btn, flex: 1, background: C.accentDim, color: C.accent, border: `1px solid ${C.accent}30`, padding: "6px 8px", fontSize: "9px" }}
+                  >
+                    Next Zone →
+                  </button>
+                </div>
+
+                <div><div style={lbl}>Navigate All Zones</div><div style={{ display: "flex", gap: "3px", flexWrap: "wrap" }}>{ZONES.filter(z => z !== selZone).map(z => { const g = GLEASON.find(x => x.value === ses.specimens[z].gleason); return <button key={z} onClick={() => setSelZone(z)} style={{ background: g ? g.bg : C.bg, border: `1px solid ${g ? g.color + "30" : C.border}`, borderRadius: "3px", color: g ? g.color : C.textMut, padding: "2px 4px", fontSize: "7px", cursor: "pointer", fontFamily: FONT }}>{z}</button>; })}</div></div>
               </div>);
-            })() : <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "180px", color: C.textMut }}><div style={{ fontSize: "24px", opacity: 0.3 }}>⊕</div><div style={{ fontSize: "10px" }}>Select a zone on the map</div></div>)}
+            })() : <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "180px", color: C.textMut }}><div style={{ fontSize: "24px", opacity: 0.3 }}>⊕</div><div style={{ fontSize: "10px" }}>Select a zone on the map</div></div>}
+              </div>
+            )}
 
             {/* ── MRI ── */}
             {panel === "mri" && (
