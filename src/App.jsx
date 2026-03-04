@@ -1904,6 +1904,7 @@ export default function App() {
   const [panel, setPanel] = useState("systematic");
   const [mainView, setMainView] = useState("map");
   const [showPrint, setShowPrint] = useState(false);
+  const [showEmailModal, setShowEmailModal] = useState(false);
   const [dragging, setDragging] = useState(null);
   const [showPatientList, setShowPatientList] = useState(false);
   const [showWelcome, setShowWelcome] = useState(true);
@@ -1959,6 +1960,119 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url; a.download = `prostate-bx-${pat.mrn || "patient"}-${new Date().toISOString().slice(0, 10)}.json`; a.click();
     URL.revokeObjectURL(url);
+  };
+
+  // Email report generator
+  const generateEmailReport = () => {
+    const specs = allSpecs(ses);
+    const nccn = computeNCCN(ses.psa, pat.tStage, pat.volume, specs);
+    const mg2 = maxG(specs);
+    const pos2 = sumCores(specs, "coresPos"); const tot2 = sumCores(specs, "coresTotal");
+    const maxI2 = Math.max(0, ...specs.map(s => parseInt(s.maxPct) || 0));
+    const pctPos2 = tot2 > 0 ? ((pos2 / tot2) * 100).toFixed(0) : 0;
+    const gg2 = mg2?.gg || 0;
+    const hasAdverse = specs.some(s => s.pni || s.crib || s.idc);
+    const riskName = nccn.group !== null ? NCCN_GROUPS[nccn.group].name : "Not assessed";
+    const maxPirads = Math.max(0, ...ses.mriLesions.map(l => l.pirads || 0));
+
+    // Treatment recs
+    const txMap = {
+      0: "Active Surveillance (preferred per NCCN)",
+      1: "Active Surveillance (preferred); alternatives: Radical Prostatectomy, Radiation Therapy",
+      2: "Active Surveillance (select patients) or Definitive Treatment; alternatives: Radical Prostatectomy, EBRT + short-term ADT, Brachytherapy",
+      3: "Radical Prostatectomy or Radiation + ADT; alternatives: EBRT + ADT (4-6 mo), RP + extended PLND",
+      4: "RP + extended PLND or Radiation + long-term ADT; alternatives: EBRT + brachy boost + ADT, EBRT + ADT (18-36 mo)",
+      5: "EBRT + long-term ADT +/- docetaxel or RP + ext. PLND (select); alternatives: systemic therapy, clinical trials",
+    };
+
+    // AS eligibility
+    const asEligible = nccn.group !== null && (nccn.group === 0 || nccn.group === 1) && gg2 <= 1 && !hasAdverse;
+    const asBorderline = nccn.group === 2 && gg2 <= 2 && pctPos2 < 50 && !hasAdverse;
+
+    // Zone details
+    const zoneLines = ZONES.map((z, i) => {
+      const s = ses.specimens[z]; const g = GLEASON.find(x => x.value === s.gleason);
+      if (!g) return null;
+      return `  ${ZONE_FULL[i]}: ${g.label}${s.coresPos && s.coresTotal ? `, ${s.coresPos}/${s.coresTotal} cores` : ""}${s.maxPct ? `, ${s.maxPct}% max` : ""}${s.pni ? " [PNI]" : ""}${s.crib ? " [Crib]" : ""}${s.idc ? " [IDC]" : ""}`;
+    }).filter(Boolean);
+
+    // MRI lesions
+    const mriLines = ses.mriLesions.map(l => {
+      const targets = ses.targetedBx.filter(t => t.lesionId === l.id);
+      const tmg = maxG(targets.filter(t => t.gleason));
+      return `  ${l.name}: PI-RADS ${l.pirads}, ${l.sizeMm ? l.sizeMm + "mm" : "N/A"}, ${l.sector}${tmg ? `, Targeted Bx: ${tmg.label}` : ""}`;
+    });
+
+    const lines = [
+      "PROSTATE BIOPSY MAPPING REPORT",
+      "=" .repeat(40),
+      "",
+      "PATIENT INFORMATION",
+      "-".repeat(30),
+      `MRN: ${pat.mrn || "N/A"}`,
+      `DOB: ${pat.dob || "N/A"}`,
+      `Biopsy Date: ${ses.date || "N/A"}`,
+      `Clinical Stage: ${pat.tStage}`,
+      "",
+      "PSA & VOLUME",
+      "-".repeat(30),
+      `PSA: ${ses.psa ? ses.psa + " ng/mL" : "N/A"}`,
+      `Prostate Volume: ${pat.volume ? pat.volume + " cc" : "N/A"}`,
+      `PSA Density: ${nccn.density !== null ? nccn.density.toFixed(3) : "N/A"}`,
+      "",
+      "NCCN RISK ASSESSMENT",
+      "-".repeat(30),
+      `Risk Group: ${riskName}`,
+      `Grade Group: ${gg2} (${mg2?.label || "No cancer"})`,
+      `Positive Cores: ${pos2}/${tot2} (${pctPos2}%)`,
+      `Max Core Involvement: ${maxI2}%`,
+      hasAdverse ? `Adverse Features: ${[specs.some(s => s.pni) ? "PNI" : "", specs.some(s => s.crib) ? "Cribriform" : "", specs.some(s => s.idc) ? "IDC" : ""].filter(Boolean).join(", ")}` : "",
+      "",
+      "TREATMENT RECOMMENDATIONS (NCCN)",
+      "-".repeat(30),
+      nccn.group !== null ? txMap[nccn.group] : "Risk group not assessed",
+      "",
+      "ACTIVE SURVEILLANCE",
+      "-".repeat(30),
+      asEligible ? "ELIGIBLE - Meets NCCN criteria for active surveillance." :
+        asBorderline ? "BORDERLINE - May be considered for AS in select patients (favorable intermediate-risk)." :
+        "NOT RECOMMENDED - Definitive treatment recommended per NCCN guidelines.",
+      "",
+    ];
+
+    if (zoneLines.length > 0) {
+      lines.push("SYSTEMATIC BIOPSY RESULTS", "-".repeat(30), ...zoneLines, "");
+    }
+
+    if (mriLines.length > 0) {
+      lines.push("MRI LESIONS & TARGETED BIOPSY", "-".repeat(30), `Highest PI-RADS: ${maxPirads}`, ...mriLines, "");
+    }
+
+    // Genomics
+    if (ses.genomics?.decipher || ses.genomics?.oncotype || ses.genomics?.prolaris) {
+      lines.push("GENOMIC CLASSIFIERS", "-".repeat(30));
+      if (ses.genomics.decipher) lines.push(`Decipher: ${ses.genomics.decipher}`);
+      if (ses.genomics.oncotype) lines.push(`Oncotype DX: ${ses.genomics.oncotype}`);
+      if (ses.genomics.prolaris) lines.push(`Prolaris: ${ses.genomics.prolaris}`);
+      lines.push("");
+    }
+
+    // Focal therapy
+    lines.push("FOCAL THERAPY ASSESSMENT", "-".repeat(30));
+    lines.push(focalOk(ses, pat) ? "Potential focal therapy candidate." : "Review focal therapy candidacy carefully.");
+
+    // Disease distribution
+    const rightPos = Object.entries(ses.specimens).filter(([z, s]) => z.startsWith("R ") && s.gleason && s.gleason !== "benign").length;
+    const leftPos = Object.entries(ses.specimens).filter(([z, s]) => z.startsWith("L ") && s.gleason && s.gleason !== "benign").length;
+    const bilat = rightPos > 0 && leftPos > 0;
+    lines.push(`Distribution: ${bilat ? "Bilateral" : rightPos > 0 ? "Unilateral (Right)" : leftPos > 0 ? "Unilateral (Left)" : "No cancer mapped"}`);
+    lines.push("");
+
+    lines.push("-".repeat(40));
+    lines.push(`Generated: ${new Date().toLocaleDateString()} | Prostate Biopsy Mapper`);
+    lines.push("Verify all data before clinical decisions.");
+
+    return lines.filter(l => l !== null).join("\n");
   };
 
   // JSON import
@@ -2055,6 +2169,53 @@ export default function App() {
     <div style={{ minHeight: "100vh", background: C.bg, color: C.textPri, fontFamily: FONT, fontSize: "11px" }}>
       <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
       {shouldShowWelcome && <WelcomeOverlay onNewDiagnostic={handleWelcomeNewDiagnostic} onNewSurveillance={handleWelcomeNewSurveillance} onImport={handleWelcomeImport} onSkip={() => setShowWelcome(false)} onPatientMode={handleWelcomePatientMode} />}
+
+      {/* ═══ EMAIL MODAL ═══ */}
+      {showEmailModal && (() => {
+        const reportText = generateEmailReport();
+        const subjectLine = `Prostate Biopsy Report${pat.mrn ? " - MRN " + pat.mrn : ""}${ses.date ? " (" + ses.date + ")" : ""}`;
+        return (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
+            <div style={{ background: C.bgCard, borderRadius: "10px", border: `1px solid ${C.border}`, width: "100%", maxWidth: "600px", maxHeight: "85vh", display: "flex", flexDirection: "column", boxShadow: "0 8px 32px rgba(0,0,0,0.2)" }}>
+              <div style={{ padding: "16px 20px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <div style={{ fontSize: "13px", fontWeight: 700, color: C.textPri }}>Email Biopsy Report</div>
+                  <div style={{ fontSize: "9px", color: C.textMut, marginTop: "2px" }}>Send report via email or copy to clipboard</div>
+                </div>
+                <button onClick={() => setShowEmailModal(false)} style={{ ...btn, background: C.bgInput, color: C.textSec, border: `1px solid ${C.border}`, padding: "4px 10px", fontSize: "11px", cursor: "pointer" }}>✕</button>
+              </div>
+              <div style={{ padding: "16px 20px", overflowY: "auto", flex: 1 }}>
+                <div style={{ marginBottom: "12px" }}>
+                  <label style={{ ...lbl, fontSize: "9px", marginBottom: "4px", display: "block" }}>Recipient Email</label>
+                  <input id="emailRecipient" type="email" placeholder="doctor@example.com" style={{ ...inp, width: "100%", boxSizing: "border-box", fontSize: "11px", padding: "8px 10px" }} />
+                </div>
+                <div style={{ marginBottom: "12px" }}>
+                  <label style={{ ...lbl, fontSize: "9px", marginBottom: "4px", display: "block" }}>Subject</label>
+                  <input id="emailSubject" type="text" defaultValue={subjectLine} style={{ ...inp, width: "100%", boxSizing: "border-box", fontSize: "11px", padding: "8px 10px" }} />
+                </div>
+                <div>
+                  <label style={{ ...lbl, fontSize: "9px", marginBottom: "4px", display: "block" }}>Report Preview</label>
+                  <pre style={{ background: C.bgInput, border: `1px solid ${C.border}`, borderRadius: "6px", padding: "10px", fontSize: "8px", lineHeight: "1.5", color: C.textSec, maxHeight: "280px", overflowY: "auto", whiteSpace: "pre-wrap", wordBreak: "break-word", fontFamily: "inherit", margin: 0 }}>{reportText}</pre>
+                </div>
+              </div>
+              <div style={{ padding: "12px 20px", borderTop: `1px solid ${C.border}`, display: "flex", gap: "8px", justifyContent: "flex-end", flexWrap: "wrap" }}>
+                <button onClick={() => {
+                  navigator.clipboard.writeText(reportText).then(() => {
+                    const b = document.getElementById("copyConfirm");
+                    if (b) { b.textContent = "Copied!"; setTimeout(() => { b.textContent = "Copy Report"; }, 2000); }
+                  });
+                }} id="copyConfirm" style={{ ...btn, background: C.bgInput, color: C.textSec, border: `1px solid ${C.border}`, padding: "8px 16px", fontSize: "10px", cursor: "pointer" }}>Copy Report</button>
+                <button onClick={() => {
+                  const to = document.getElementById("emailRecipient")?.value || "";
+                  const subj = document.getElementById("emailSubject")?.value || subjectLine;
+                  const mailtoUrl = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(reportText)}`;
+                  window.open(mailtoUrl, "_blank");
+                }} style={{ ...btn, background: C.accent, color: "#fff", border: "none", padding: "8px 16px", fontSize: "10px", cursor: "pointer", borderRadius: "5px" }}>Send via Email</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       <input type="file" ref={imgInputRef} accept="image/*" style={{ display: "none" }} onChange={handleImageUpload} />
       <input type="file" ref={importRef} accept=".json" style={{ display: "none" }} onChange={handleImport} />
 
@@ -2071,6 +2232,7 @@ export default function App() {
           <Tabs tabs={[{ key: "map", label: "Map" }, { key: "summary", label: "Summary" }, { key: "kinetics", label: "PSA" }, { key: "compare", label: "Compare" }, { key: "edu", label: "Edu" }, { key: "guide", label: "Guide" }]} active={mainView} onSelect={setMainView} small />
           <button onClick={() => setShowPrint(true)} style={{ ...btn, background: C.successDim, color: C.success, border: `1px solid ${C.success}30`, padding: "3px 8px" }}>Print</button>
           <button onClick={exportJSON} style={{ ...btn, background: C.accentDim, color: C.accent, border: `1px solid ${C.accent}30`, padding: "3px 8px" }}>JSON↓</button>
+          <button onClick={() => setShowEmailModal(true)} style={{ ...btn, background: C.warnDim, color: C.warn, border: `1px solid ${C.warn}30`, padding: "3px 8px" }}>Email</button>
           <button onClick={() => importRef.current?.click()} style={{ ...btn, background: C.bgInput, color: C.textSec, border: `1px solid ${C.border}`, padding: "3px 8px" }}>Import</button>
           <button onClick={() => setShowPatientList(!showPatientList)} style={{ ...btn, background: showPatientList ? C.accentDim : C.bgInput, color: showPatientList ? C.accent : C.textSec, border: `1px solid ${showPatientList ? C.accent + "40" : C.border}`, padding: "3px 8px" }}>
             Registry ({patients.length})
